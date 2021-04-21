@@ -73,6 +73,16 @@ impl Registers {
     }
 }
 
+impl fmt::Display for Registers {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(
+            f,
+            "(a: {}, b: {}, c: {}, d: {}, e: {}, h: {}, l: {}, f: {}, pc: {}, sp: {} )",
+            self.a, self.b, self.c, self.d, self.e, self.h, self.l, self.f, self.pc, self.sp
+        )
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use crate::cpu::registers::RegisterPair;
