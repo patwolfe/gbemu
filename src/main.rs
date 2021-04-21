@@ -1,6 +1,7 @@
 extern crate minifb;
 use minifb::{Key, Scale, ScaleMode, Window, WindowOptions};
 
+mod cpu;
 mod gb;
 
 fn main() {
