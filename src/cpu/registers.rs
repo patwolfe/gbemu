@@ -49,8 +49,8 @@ impl Registers {
     }
 
     pub fn set_16bit(&mut self, reg_pair: RegisterPair, value: u16) {
-        let r1 = ((value & 0xF0) >> 8) as u8;
-        let r2 = (value & 0x0F) as u8;
+        let r1 = (value >> 8) as u8;
+        let r2 = value as u8;
 
         match reg_pair {
             RegisterPair::Af => {
@@ -95,8 +95,9 @@ mod tests {
     #[test]
     fn set_16() {
         let mut registers = Registers::new();
-        registers.set_16bit(RegisterPair::Af, 0xAC);
-        assert_eq!(registers.a, 0xA);
-        assert_eq!(registers.f, 0xC);
+        registers.set_16bit(RegisterPair::Af, 0x0A0C);
+        println!("{}", registers);
+        assert_eq!(registers.a, 0x0A);
+        assert_eq!(registers.f, 0x0C);
     }
 }
