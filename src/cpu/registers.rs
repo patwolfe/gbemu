@@ -9,8 +9,6 @@ pub struct Registers {
     h: u8,
     l: u8,
     f: u8,
-    pc: u16,
-    sp: u16,
 }
 pub enum RegisterPair {
     Af,
@@ -30,8 +28,6 @@ impl Registers {
             h: 0,
             l: 0,
             f: 0,
-            pc: 0,
-            sp: 0,
         }
     }
 
@@ -77,8 +73,8 @@ impl fmt::Display for Registers {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(
             f,
-            "(a: {}, b: {}, c: {}, d: {}, e: {}, h: {}, l: {}, f: {}, pc: {}, sp: {} )",
-            self.a, self.b, self.c, self.d, self.e, self.h, self.l, self.f, self.pc, self.sp
+            "[ a: {}, b: {}, c: {}, d: {}, e: {}, h: {}, l: {}, f: {} ]",
+            self.a, self.b, self.c, self.d, self.e, self.h, self.l, self.f,
         )
     }
 }
