@@ -1,3 +1,5 @@
+use std::fmt;
+
 pub struct Registers {
     a: u8,
     b: u8,
@@ -33,8 +35,8 @@ impl Registers {
         }
     }
 
-    pub fn get_16bit_reg(self: &Registers, pair: RegisterPair) -> u16 {
-        match pair {
+    pub fn get_16bit(self: &Registers, reg_pair: RegisterPair) -> u16 {
+        match reg_pair {
             RegisterPair::Af => Registers::get_combined_value(self.a, self.f),
             RegisterPair::Bc => Registers::get_combined_value(self.b, self.c),
             RegisterPair::De => Registers::get_combined_value(self.d, self.e),
@@ -45,6 +47,30 @@ impl Registers {
     fn get_combined_value(r1: u8, r2: u8) -> u16 {
         (r1 as u16) << 8 & r2 as u16
     }
+
+    pub fn set_16bit(&mut self, reg_pair: RegisterPair, value: u16) {
+        let r1 = ((value & 0xF0) >> 8) as u8;
+        let r2 = (value & 0x0F) as u8;
+
+        match reg_pair {
+            RegisterPair::Af => {
+                self.a = r1;
+                self.f = r2;
+            }
+            RegisterPair::Bc => {
+                self.b = r1;
+                self.c = r2;
+            }
+            RegisterPair::De => {
+                self.d = r1;
+                self.e = r2;
+            }
+            RegisterPair::Hl => {
+                self.h = r1;
+                self.l = r2;
+            }
+        }
+    }
 }
 
 #[cfg(test)]
@@ -52,8 +78,15 @@ mod tests {
     use crate::cpu::registers::RegisterPair;
     use crate::cpu::registers::Registers;
     #[test]
-    fn it_works() {
+    fn init_zero() {
         let registers = Registers::new();
-        assert_eq!(registers.get_16bit_reg(RegisterPair::Af), 0)
+        assert_eq!(registers.get_16bit(RegisterPair::Af), 0)
+    }
+    #[test]
+    fn set_16() {
+        let mut registers = Registers::new();
+        registers.set_16bit(RegisterPair::Af, 0xAC);
+        assert_eq!(registers.a, 0xA);
+        assert_eq!(registers.f, 0xC);
     }
 }
