@@ -45,7 +45,7 @@ impl Registers {
     }
 
     fn get_combined_value(r1: u8, r2: u8) -> u16 {
-        (r1 as u16) << 8 & r2 as u16
+        (r1 as u16) << 8 | r2 as u16
     }
 
     pub fn set_16bit(&mut self, reg_pair: RegisterPair, value: u16) {
@@ -96,8 +96,13 @@ mod tests {
     fn set_16() {
         let mut registers = Registers::new();
         registers.set_16bit(RegisterPair::Af, 0x0A0C);
-        println!("{}", registers);
         assert_eq!(registers.a, 0x0A);
         assert_eq!(registers.f, 0x0C);
+    }
+    #[test]
+    fn set_16_then_get_16() {
+        let mut registers = Registers::new();
+        registers.set_16bit(RegisterPair::Af, 0x0A0C);
+        assert_eq!(registers.get_16bit(RegisterPair::Af), 0x0A0C);
     }
 }
