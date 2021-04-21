@@ -20,14 +20,14 @@ pub enum RegisterPair {
 impl Registers {
     pub fn new() -> Registers {
         Registers {
-            a: 0,
-            b: 0,
-            c: 0,
-            d: 0,
-            e: 0,
-            h: 0,
-            l: 0,
-            f: 0,
+            a: 0x01,
+            b: 0x00,
+            c: 0x13,
+            d: 0x00,
+            e: 0xD8,
+            h: 0x01,
+            l: 0x4D,
+            f: 0xB0,
         }
     }
 
@@ -84,9 +84,9 @@ mod tests {
     use crate::cpu::registers::RegisterPair;
     use crate::cpu::registers::Registers;
     #[test]
-    fn init_zero() {
+    fn init_registers() {
         let registers = Registers::new();
-        assert_eq!(registers.get_16bit(RegisterPair::Af), 0)
+        assert_eq!(registers.get_16bit(RegisterPair::Af), 0x01B0)
     }
     #[test]
     fn set_16() {

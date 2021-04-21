@@ -13,13 +13,12 @@ impl Cpu {
     pub fn new() -> Cpu {
         Cpu {
             registers: Registers::new(),
-            pc: 0,
-            sp: 0,
+            pc: 0x0100,
+            sp: 0xFFFE,
         }
     }
     pub fn step(&mut self) {
-        let instruction = 0x00;
-        self.pc = self.execute(instruction);
+        self.pc = self.execute(Instruction::Ld);
     }
 
     pub fn execute(&mut self, instruction: Instruction) -> u16 {
