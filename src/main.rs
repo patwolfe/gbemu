@@ -5,7 +5,7 @@ mod cpu;
 mod gb;
 
 fn main() {
-    let mut buffer: Vec<u32> = vec![0; gb::screen_width * gb::screen_height];
+    let mut buffer: Vec<u32> = vec![0; gb::total_pixels];
 
     let mut window = Window::new(
         "Test - ESC to exit",
