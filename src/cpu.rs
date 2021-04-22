@@ -3,7 +3,7 @@ mod registers;
 use crate::cpu::instruction::Instruction;
 use crate::cpu::registers::Registers;
 
-struct Cpu {
+pub struct Cpu {
     registers: Registers,
     pc: u16,
     sp: u16,
@@ -17,11 +17,12 @@ impl Cpu {
             sp: 0xFFFE,
         }
     }
+
     pub fn step(&mut self) {
         self.pc = self.execute(Instruction::Nop);
     }
 
-    pub fn execute(&mut self, instruction: Instruction) -> u16 {
+    fn execute(&mut self, _instruction: Instruction) -> u16 {
         self.pc + 1
     }
 }

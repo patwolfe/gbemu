@@ -4,7 +4,12 @@ use minifb::{Key, Scale, ScaleMode, Window, WindowOptions};
 mod cpu;
 mod gb;
 
+use crate::cpu::Cpu;
+
 fn main() {
+    let mut cpu = Cpu::new();
+    cpu.step();
+
     let mut buffer: Vec<u32> = vec![0; gb::total_pixels];
 
     let mut window = Window::new(
