@@ -26,7 +26,7 @@ pub enum Instruction {
     AddPtr(PtrArithOperand, PtrArithOperand),
     IncrementPtr(PtrArithOperand),
     DecrementPtr(PtrArithOperand),
-    Jump(JumpType),
+    Jump(JumpKind),
 }
 
 impl fmt::Display for Instruction {
@@ -54,6 +54,7 @@ impl fmt::Display for Instruction {
             }
             Instruction::IncrementPtr(operand) => std::format!("INC {}", operand),
             Instruction::DecrementPtr(operand) => std::format!("DEC {}", operand),
+            Instruction::Jump(kind) => std::format!("J{}", kind),
         };
         write!(f, "{}", instruction_string)
     }
@@ -321,6 +322,50 @@ impl fmt::Display for PtrArithOperand {
             PtrArithOperand::Register16(reg_pair) => std::format!("({})", reg_pair),
             PtrArithOperand::StackPointer => String::from("SP"),
             PtrArithOperand::Data(i8) => std::format!("${}", i8),
+        };
+        write!(f, "{}", operand_string)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum JumpKind {
+    JumpRelative(u8),
+    JumpRelativeConditional(JumpCondition, u8),
+    Jump(u16),
+    JumpConditional(JumpCondition, u16),
+    JumpHl,
+}
+
+impl fmt::Display for JumpKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let kind = match self {
+            JumpKind::JumpRelative(offset) => std::format!("R {}", offset),
+            JumpKind::JumpRelativeConditional(cond, offset) => {
+                std::format!("R {} {}", cond, offset)
+            }
+            JumpKind::Jump(address) => std::format!("P {}", address),
+            JumpKind::JumpConditional(cond, address) => std::format!("P {} {}", cond, address),
+            JumpKind::JumpHl => String::from("P (HL)"),
+        };
+        write!(f, "{}", kind)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum JumpCondition {
+    Zero,
+    NonZero,
+    Carry,
+    NonCarry,
+}
+
+impl fmt::Display for JumpCondition {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let operand_string = match self {
+            JumpCondition::Zero => String::from("Z"),
+            JumpCondition::NonZero => String::from("NZ"),
+            JumpCondition::Carry => String::from("C"),
+            JumpCondition::NonCarry => String::from("NC"),
         };
         write!(f, "{}", operand_string)
     }
