@@ -59,4 +59,26 @@ impl Memory {
             0xFFFF => self.interrupt_register,
         }
     }
+
+    pub fn write_byte(&mut self, address: u16, value: u8) {
+        match address {
+            0x0..=0x3FFF => self.rom_bank0[address as usize] = value,
+            0x4000..=0x7FFF => self.rom_bank1[(address as usize) - 0x4000] = value,
+            0x8000..=0x9FFF => self.vram[(address as usize) - 0x8000] = value,
+            0xA000..=0xBFFF => self.eram[(address as usize) - 0xA000] = value,
+            0xC000..=0xDFFF => self.wram[(address as usize) - 0xC000] = value,
+            0xE000..=0xFDFF => panic!(
+                "Address {:#0x} attempts to write to prohibited region of memory",
+                address
+            ),
+            0xFE00..=0xFE9F => self.oam[(address as usize) - 0xFE00] = value,
+            0xFEA0..=0xFEFF => panic!(
+                "Address {:#0x} attempts to write to prohibited region of memory",
+                address
+            ),
+            0xFF00..=0xFF7F => self.io[(address as usize) - 0xFF00] = value,
+            0xFF80..=0xFFFE => self.hram[(address as usize) - 0xFF80] = value,
+            0xFFFF => self.interrupt_register = value,
+        };
+    }
 }
