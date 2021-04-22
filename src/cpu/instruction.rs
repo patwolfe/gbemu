@@ -1,5 +1,7 @@
 use std::fmt;
 
+use crate::cpu::registers::Register;
+use crate::cpu::registers::RegisterPair;
 use crate::memory::Memory;
 
 #[derive(Debug, PartialEq)]
@@ -66,9 +68,7 @@ impl Instruction {
 
 #[derive(Debug, PartialEq)]
 pub enum Load16Target {
-    Bc,
-    De,
-    Hl,
+    Register16(RegisterPair),
     StackPointer,
     Address(u16),
 }
@@ -76,9 +76,7 @@ pub enum Load16Target {
 impl fmt::Display for Load16Target {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let operand_string = match self {
-            Load16Target::Bc => String::from("BC"),
-            Load16Target::De => String::from("DE"),
-            Load16Target::Hl => String::from("HL"),
+            Load16Target::Register16(reg_pair) => std::format!("{}", reg_pair),
             Load16Target::StackPointer => String::from("SP"),
             Load16Target::Address(data) => data.to_string(),
         };
@@ -106,18 +104,10 @@ impl fmt::Display for Load16Source {
 
 #[derive(Debug, PartialEq)]
 pub enum Load8Operand {
-    A,
-    B,
-    C,
-    D,
-    E,
-    H,
-    L,
+    Register(Register),
     Address(u16),
     AtC,
-    AtBc,
-    AtDe,
-    AtHl,
+    AtReg16(RegisterPair),
     AtHli,
     AtHld,
 }
@@ -125,17 +115,9 @@ pub enum Load8Operand {
 impl fmt::Display for Load8Operand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let operand_string = match self {
-            Load8Operand::A => String::from("A"),
-            Load8Operand::B => String::from("B"),
-            Load8Operand::C => String::from("C"),
-            Load8Operand::D => String::from("D"),
-            Load8Operand::E => String::from("E"),
-            Load8Operand::H => String::from("H"),
-            Load8Operand::L => String::from("L"),
+            Load8Operand::Register(reg) => std::format!("{}", reg),
             Load8Operand::AtC => String::from("(C)"),
-            Load8Operand::AtBc => String::from("(BC)"),
-            Load8Operand::AtDe => String::from("(DE)"),
-            Load8Operand::AtHl => String::from("(HL)"),
+            Load8Operand::AtReg16(reg_pair) => std::format!("({})", reg_pair),
             Load8Operand::AtHli => String::from("(HL+)"),
             Load8Operand::AtHld => String::from("(HL-)"),
             Load8Operand::Address(a16) => std::format!("({})", a16),
@@ -146,13 +128,7 @@ impl fmt::Display for Load8Operand {
 
 #[derive(Debug, PartialEq)]
 pub enum ArithmeticOperand {
-    A,
-    B,
-    C,
-    D,
-    E,
-    H,
-    L,
+    Register(Register),
     AtHl,
     Data(u8),
 }
@@ -160,13 +136,7 @@ pub enum ArithmeticOperand {
 impl fmt::Display for ArithmeticOperand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let operand_string = match self {
-            ArithmeticOperand::A => String::from("A"),
-            ArithmeticOperand::B => String::from("B"),
-            ArithmeticOperand::C => String::from("C"),
-            ArithmeticOperand::D => String::from("D"),
-            ArithmeticOperand::E => String::from("E"),
-            ArithmeticOperand::H => String::from("H"),
-            ArithmeticOperand::L => String::from("L"),
+            ArithmeticOperand::Register(reg) => std::format!("{}", reg),
             ArithmeticOperand::AtHl => String::from("(HL)"),
             ArithmeticOperand::Data(u8) => std::format!("${}", u8),
         };
@@ -176,9 +146,7 @@ impl fmt::Display for ArithmeticOperand {
 
 #[derive(Debug, PartialEq)]
 pub enum AddPtrOperand {
-    Bc,
-    De,
-    Hl,
+    Register16(RegisterPair),
     StackPointer,
     Data(i8),
 }
@@ -186,9 +154,7 @@ pub enum AddPtrOperand {
 impl fmt::Display for AddPtrOperand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let operand_string = match self {
-            AddPtrOperand::Bc => String::from("BC"),
-            AddPtrOperand::De => String::from("DE"),
-            AddPtrOperand::Hl => String::from("HL"),
+            AddPtrOperand::Register16(reg_pair) => std::format!("({})", reg_pair),
             AddPtrOperand::StackPointer => String::from("SP"),
             AddPtrOperand::Data(i8) => std::format!("{}", i8),
         };
@@ -198,13 +164,7 @@ impl fmt::Display for AddPtrOperand {
 
 #[cfg(test)]
 mod tests {
-    use crate::cpu::instruction::AddPtrOperand;
-    use crate::cpu::instruction::ArithmeticOperand;
-    use crate::cpu::instruction::Instruction;
-    use crate::cpu::instruction::Load16Source;
-    use crate::cpu::instruction::Load16Target;
-    use crate::cpu::instruction::Load8Operand;
-    use crate::memory::Memory;
+    use super::*;
     #[test]
     fn display_nop() {
         assert_eq!(std::format!("{}", Instruction::Nop), "NOP");
@@ -216,7 +176,10 @@ mod tests {
     #[test]
     fn display_load8() {
         assert_eq!(
-            std::format!("{}", Instruction::Ld8(Load8Operand::A, Load8Operand::AtC)),
+            std::format!(
+                "{}",
+                Instruction::Ld8(Load8Operand::Register(Register::A), Load8Operand::AtC)
+            ),
             "LD A,(C)"
         );
     }
@@ -225,7 +188,10 @@ mod tests {
         assert_eq!(
             std::format!(
                 "{}",
-                Instruction::Ld16(Load16Target::Hl, Load16Source::SpPlus(15))
+                Instruction::Ld16(
+                    Load16Target::Register16(RegisterPair::Hl),
+                    Load16Source::SpPlus(15)
+                )
             ),
             "LD HL,SP+15"
         );
@@ -233,7 +199,10 @@ mod tests {
     #[test]
     fn display_add() {
         assert_eq!(
-            std::format!("{}", Instruction::Add(ArithmeticOperand::B)),
+            std::format!(
+                "{}",
+                Instruction::Add(ArithmeticOperand::Register(Register::B))
+            ),
             "ADD B"
         );
     }
@@ -247,28 +216,40 @@ mod tests {
     #[test]
     fn display_adc() {
         assert_eq!(
-            std::format!("{}", Instruction::AddCarry(ArithmeticOperand::B)),
+            std::format!(
+                "{}",
+                Instruction::AddCarry(ArithmeticOperand::Register(Register::B))
+            ),
             "ADC B"
         );
     }
     #[test]
     fn display_sbc() {
         assert_eq!(
-            std::format!("{}", Instruction::SubCarry(ArithmeticOperand::D)),
+            std::format!(
+                "{}",
+                Instruction::SubCarry(ArithmeticOperand::Register(Register::D))
+            ),
             "SBC D"
         );
     }
     #[test]
     fn display_and() {
         assert_eq!(
-            std::format!("{}", Instruction::And(ArithmeticOperand::B)),
+            std::format!(
+                "{}",
+                Instruction::And(ArithmeticOperand::Register(Register::B))
+            ),
             "AND B"
         );
     }
     #[test]
     fn display_or() {
         assert_eq!(
-            std::format!("{}", Instruction::Or(ArithmeticOperand::C)),
+            std::format!(
+                "{}",
+                Instruction::Or(ArithmeticOperand::Register(Register::C))
+            ),
             "OR C"
         );
     }
@@ -289,14 +270,20 @@ mod tests {
     #[test]
     fn display_inc() {
         assert_eq!(
-            std::format!("{}", Instruction::Increment(ArithmeticOperand::A)),
+            std::format!(
+                "{}",
+                Instruction::Increment(ArithmeticOperand::Register(Register::A))
+            ),
             "INC A"
         );
     }
     #[test]
     fn display_dec() {
         assert_eq!(
-            std::format!("{}", Instruction::Decrement(ArithmeticOperand::D)),
+            std::format!(
+                "{}",
+                Instruction::Decrement(ArithmeticOperand::Register(Register::D))
+            ),
             "DEC D"
         );
     }

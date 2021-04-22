@@ -94,7 +94,7 @@ impl Registers {
             Register::D => self.d = value,
             Register::E => self.e = value,
             Register::H => self.h = value,
-            Register::gL => self.l = value,
+            Register::L => self.l = value,
             Register::F => self.f = value,
         }
     }
@@ -149,6 +149,7 @@ impl fmt::Display for Registers {
 
 #[cfg(test)]
 mod tests {
+    use crate::cpu::registers::Register;
     use crate::cpu::registers::RegisterPair;
     use crate::cpu::registers::Registers;
     #[test]
