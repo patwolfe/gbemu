@@ -10,11 +10,53 @@ pub struct Registers {
     l: u8,
     f: u8,
 }
+
+#[derive(Debug, PartialEq)]
+pub enum Register {
+    A,
+    B,
+    C,
+    D,
+    E,
+    H,
+    L,
+    F,
+}
+
+impl fmt::Display for Register {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let register_string = match self {
+            Register::A => String::from("A"),
+            Register::B => String::from("B"),
+            Register::C => String::from("C"),
+            Register::D => String::from("D"),
+            Register::E => String::from("E"),
+            Register::H => String::from("H"),
+            Register::L => String::from("L"),
+            Register::F => String::from("F"),
+        };
+        write!(f, "{}", register_string)
+    }
+}
+
+#[derive(Debug, PartialEq)]
 pub enum RegisterPair {
     Af,
     Bc,
     De,
     Hl,
+}
+
+impl fmt::Display for RegisterPair {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let register_string = match self {
+            RegisterPair::Af => String::from("AF"),
+            RegisterPair::Bc => String::from("BC"),
+            RegisterPair::De => String::from("DE"),
+            RegisterPair::Hl => String::from("HL"),
+        };
+        write!(f, "{}", register_string)
+    }
 }
 
 impl Registers {
@@ -28,6 +70,32 @@ impl Registers {
             h: 0x01,
             l: 0x4D,
             f: 0xB0,
+        }
+    }
+
+    pub fn get(&self, reg: Register) -> u8 {
+        match reg {
+            Register::A => self.a,
+            Register::B => self.b,
+            Register::C => self.c,
+            Register::D => self.d,
+            Register::E => self.e,
+            Register::H => self.h,
+            Register::L => self.l,
+            Register::F => self.f,
+        }
+    }
+
+    pub fn set(&mut self, reg: Register, value: u8) {
+        match reg {
+            Register::A => self.a = value,
+            Register::B => self.b = value,
+            Register::C => self.c = value,
+            Register::D => self.d = value,
+            Register::E => self.e = value,
+            Register::H => self.h = value,
+            Register::gL => self.l = value,
+            Register::F => self.f = value,
         }
     }
 
