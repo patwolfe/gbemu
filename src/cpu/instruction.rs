@@ -1,5 +1,8 @@
 use std::fmt;
 
+use crate::memory::Memory;
+
+#[derive(Debug, PartialEq)]
 pub enum Instruction {
     Nop,
     Stop,
@@ -51,11 +54,17 @@ impl fmt::Display for Instruction {
 }
 
 impl Instruction {
-    pub fn from_bytes(memory: &Box<[u8]>, pc: u16) -> Instruction {
-        Instruction::Nop
+    pub fn from_bytes(memory: &Memory, pc: u16) -> Instruction {
+        let byte = memory.read_byte(pc);
+        match byte {
+            0x00 => Instruction::Nop,
+            0x10 => Instruction::Stop,
+            _ => panic!(),
+        }
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum Load16Target {
     Bc,
     De,
@@ -77,6 +86,7 @@ impl fmt::Display for Load16Target {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum Load16Source {
     Data(u16),
     SpPlus(i8),
@@ -94,6 +104,7 @@ impl fmt::Display for Load16Source {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum Load8Operand {
     A,
     B,
@@ -133,6 +144,7 @@ impl fmt::Display for Load8Operand {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum ArithmeticOperand {
     A,
     B,
@@ -162,6 +174,7 @@ impl fmt::Display for ArithmeticOperand {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum AddPtrOperand {
     Bc,
     De,
@@ -190,7 +203,7 @@ mod tests {
     use crate::cpu::instruction::Load16Source;
     use crate::cpu::instruction::Load16Target;
     use crate::cpu::instruction::Load8Operand;
-
+    use crate::memory::Memory;
     #[test]
     fn display_nop() {
         assert_eq!(std::format!("{}", Instruction::Nop), "NOP");
@@ -295,5 +308,15 @@ mod tests {
             ),
             "ADD SP,25"
         );
+    }
+    #[test]
+    fn decode_nop() {
+        let memory = Memory::initialize();
+        assert_eq!(Instruction::from_bytes(&memory, 0), Instruction::Nop);
+    }
+    #[test]
+    fn decode_nop_fails() {
+        let memory = Memory::initialize();
+        assert_ne!(Instruction::from_bytes(&memory, 0), Instruction::Stop);
     }
 }
