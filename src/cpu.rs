@@ -23,7 +23,7 @@ impl Cpu {
     }
 
     pub fn step(&mut self) {
-        let instruction = Instruction::from_bytes(&self.memory.bootrom, self.pc);
+        let instruction = Instruction::from_bytes(&self.memory, self.pc);
         self.pc = self.execute(instruction);
     }
 
@@ -32,6 +32,7 @@ impl Cpu {
     }
 }
 
+#[cfg(test)]
 mod test {
     use crate::cpu::instruction::AddPtrOperand;
     use crate::cpu::instruction::ArithmeticOperand;
@@ -50,6 +51,7 @@ mod test {
     #[test]
     fn step_nop() {
         let mut cpu = Cpu::new();
+        cpu.pc = 0;
         let old_pc = cpu.pc;
         cpu.step();
         assert_eq!(cpu.pc, old_pc + 1);

@@ -196,6 +196,7 @@ impl fmt::Display for AddPtrOperand {
     }
 }
 
+#[cfg(test)]
 mod tests {
     use crate::cpu::instruction::AddPtrOperand;
     use crate::cpu::instruction::ArithmeticOperand;
