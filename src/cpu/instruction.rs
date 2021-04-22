@@ -23,7 +23,9 @@ pub enum Instruction {
     Cp(ArithmeticOperand),
     Increment(ArithmeticOperand),
     Decrement(ArithmeticOperand),
-    AddPtr(AddPtrOperand, AddPtrOperand),
+    AddPtr(PtrArithOperand, PtrArithOperand),
+    IncrementPtr(PtrArithOperand),
+    DecrementPtr(PtrArithOperand),
 }
 
 impl fmt::Display for Instruction {
@@ -49,16 +51,17 @@ impl fmt::Display for Instruction {
             Instruction::AddPtr(operand1, operand2) => {
                 std::format!("ADD {},{}", operand1, operand2)
             }
-            _ => String::from("Not yet"),
+            Instruction::IncrementPtr(operand) => std::format!("INC {}", operand),
+            Instruction::DecrementPtr(operand) => std::format!("DEC {}", operand),
         };
         write!(f, "{}", instruction_string)
     }
 }
 
 impl Instruction {
-    pub fn from_bytes(memory: &Memory, pc: u16) -> Instruction {
-        let byte = memory.read_byte(pc);
-        let high_bits = byte & 0xF0;
+    pub fn from_bytes(memory: &Memory, a: u16) -> Instruction {
+        let byte = memory.read_byte(a);
+        let high_bits = (byte & 0xF0) >> 4;
         let low_bits = byte & 0x0F;
         match (high_bits, low_bits) {
             (0x0, 0x0) => Instruction::Nop,
@@ -69,10 +72,10 @@ impl Instruction {
                     0x1 => Load16Target::Register16(RegisterPair::De),
                     0x2 => Load16Target::Register16(RegisterPair::Hl),
                     0x3 => Load16Target::StackPointer,
-                    _ => panic!("Invalid opcode: {}", byte.is_ascii_hexdigit()),
+                    _ => panic!("Invalid opcode: {:#x}", byte),
                 };
                 let data: u16 =
-                    (memory.read_byte(pc + 1) as u16) << 8 | memory.read_byte(pc + 2) as u16;
+                    (memory.read_byte(a + 1) as u16) << 8 | memory.read_byte(a + 2) as u16;
                 Instruction::Load16(target, Load16Source::Data(data))
             }
             (0x0..=0x3, 0x2) => {
@@ -81,11 +84,35 @@ impl Instruction {
                     0x1 => Load8Operand::AtReg16(RegisterPair::De),
                     0x2 => Load8Operand::AtHli,
                     0x3 => Load8Operand::AtHld,
-                    _ => panic!("Invalid opcode: {}", byte),
+                    _ => panic!("Invalid opcode: {:#x}", byte),
                 };
                 Instruction::Load8(target, Load8Operand::Register(Register::A))
             }
-            _ => panic!(),
+            (0x0..=0x3, 0x3) => {
+                let operand = match high_bits {
+                    0x0 => PtrArithOperand::Register16(RegisterPair::Bc),
+                    0x1 => PtrArithOperand::Register16(RegisterPair::De),
+                    0x2 => PtrArithOperand::Register16(RegisterPair::Hl),
+                    0x3 => PtrArithOperand::StackPointer,
+                    _ => panic!("Invalid opcode: {:#x}", byte),
+                };
+                Instruction::IncrementPtr(operand)
+            }
+            (0x0..=0x3, 0x4..=0x5) => {
+                let operand = match high_bits {
+                    0x0 => ArithmeticOperand::Register(Register::B),
+                    0x1 => ArithmeticOperand::Register(Register::D),
+                    0x2 => ArithmeticOperand::Register(Register::H),
+                    0x3 => ArithmeticOperand::AtHl,
+                    _ => panic!("Invalid opcode: {:#x}", byte),
+                };
+                if let 0x4 = low_bits {
+                    Instruction::Increment(operand)
+                } else {
+                    Instruction::Decrement(operand)
+                }
+            }
+            _ => panic!("Couldn't match opcode for {:#x}/{:#x}", high_bits, low_bits),
         }
     }
 }
@@ -169,18 +196,18 @@ impl fmt::Display for ArithmeticOperand {
 }
 
 #[derive(Debug, PartialEq)]
-pub enum AddPtrOperand {
+pub enum PtrArithOperand {
     Register16(RegisterPair),
     StackPointer,
     Data(i8),
 }
 
-impl fmt::Display for AddPtrOperand {
+impl fmt::Display for PtrArithOperand {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let operand_string = match self {
-            AddPtrOperand::Register16(reg_pair) => std::format!("({})", reg_pair),
-            AddPtrOperand::StackPointer => String::from("SP"),
-            AddPtrOperand::Data(i8) => std::format!("{}", i8),
+            PtrArithOperand::Register16(reg_pair) => std::format!("({})", reg_pair),
+            PtrArithOperand::StackPointer => String::from("SP"),
+            PtrArithOperand::Data(i8) => std::format!("{}", i8),
         };
         write!(f, "{}", operand_string)
     }
@@ -316,7 +343,7 @@ mod tests {
         assert_eq!(
             std::format!(
                 "{}",
-                Instruction::AddPtr(AddPtrOperand::StackPointer, AddPtrOperand::Data(25))
+                Instruction::AddPtr(PtrArithOperand::StackPointer, PtrArithOperand::Data(25))
             ),
             "ADD SP,25"
         );
@@ -330,6 +357,12 @@ mod tests {
     fn decode_nop_fails() {
         let memory = Memory::initialize();
         assert_ne!(Instruction::from_bytes(&memory, 0), Instruction::Stop);
+    }
+    #[test]
+    fn decode_stop() {
+        let mut memory = Memory::initialize();
+        memory.bootrom[0] = 0x10;
+        assert_eq!(Instruction::from_bytes(&memory, 0), Instruction::Stop);
     }
     #[test]
     fn decode_ld8() {
@@ -355,6 +388,33 @@ mod tests {
                 Load16Target::Register16(RegisterPair::Bc),
                 Load16Source::Data(0xABCD)
             )
+        );
+    }
+    #[test]
+    fn decode_inc16() {
+        let mut memory = Memory::initialize();
+        memory.bootrom[0] = 0x23;
+        assert_eq!(
+            Instruction::from_bytes(&memory, 0),
+            Instruction::IncrementPtr(PtrArithOperand::Register16(RegisterPair::Hl))
+        );
+    }
+    #[test]
+    fn decode_inc() {
+        let mut memory = Memory::initialize();
+        memory.bootrom[0] = 0x24;
+        assert_eq!(
+            Instruction::from_bytes(&memory, 0),
+            Instruction::Increment(ArithmeticOperand::Register(Register::H))
+        );
+    }
+    #[test]
+    fn decode_dec() {
+        let mut memory = Memory::initialize();
+        memory.bootrom[0] = 0x35;
+        assert_eq!(
+            Instruction::from_bytes(&memory, 0),
+            Instruction::Decrement(ArithmeticOperand::AtHl)
         );
     }
 }

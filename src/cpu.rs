@@ -34,15 +34,7 @@ impl Cpu {
 
 #[cfg(test)]
 mod test {
-    use crate::cpu::instruction::AddPtrOperand;
-    use crate::cpu::instruction::ArithmeticOperand;
-    use crate::cpu::instruction::Instruction;
-    use crate::cpu::instruction::Load16Source;
-    use crate::cpu::instruction::Load16Target;
-    use crate::cpu::instruction::Load8Operand;
-    use crate::cpu::registers::Registers;
-    use crate::cpu::Cpu;
-
+    use super::*;
     #[test]
     fn execute_nop() {
         let mut cpu = Cpu::new();
