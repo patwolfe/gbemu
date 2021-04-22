@@ -149,9 +149,7 @@ impl fmt::Display for Registers {
 
 #[cfg(test)]
 mod tests {
-    use crate::cpu::registers::Register;
-    use crate::cpu::registers::RegisterPair;
-    use crate::cpu::registers::Registers;
+    use super::*;
     #[test]
     fn init_registers() {
         let registers = Registers::new();

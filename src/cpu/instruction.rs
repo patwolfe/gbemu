@@ -11,8 +11,8 @@ pub enum Instruction {
     Halt,
     Di,
     Ei,
-    Ld16(Load16Target, Load16Source),
-    Ld8(Load8Operand, Load8Operand),
+    Load16(Load16Target, Load16Source),
+    Load8(Load8Operand, Load8Operand),
     Add(ArithmeticOperand),
     Sub(ArithmeticOperand),
     AddCarry(ArithmeticOperand),
@@ -34,8 +34,8 @@ impl fmt::Display for Instruction {
             Instruction::Halt => String::from("HALT"),
             Instruction::Di => String::from("DI"),
             Instruction::Ei => String::from("EI"),
-            Instruction::Ld16(target, source) => std::format!("LD {},{}", target, source),
-            Instruction::Ld8(target, source) => std::format!("LD {},{}", target, source),
+            Instruction::Load16(target, source) => std::format!("LD {},{}", target, source),
+            Instruction::Load8(target, source) => std::format!("LD {},{}", target, source),
             Instruction::Add(operand) => std::format!("ADD {}", operand),
             Instruction::Sub(operand) => std::format!("SUB {}", operand),
             Instruction::AddCarry(operand) => std::format!("ADC {}", operand),
@@ -58,9 +58,33 @@ impl fmt::Display for Instruction {
 impl Instruction {
     pub fn from_bytes(memory: &Memory, pc: u16) -> Instruction {
         let byte = memory.read_byte(pc);
-        match byte {
-            0x00 => Instruction::Nop,
-            0x10 => Instruction::Stop,
+        let high_bits = byte & 0xF0;
+        let low_bits = byte & 0x0F;
+        match (high_bits, low_bits) {
+            (0x0, 0x0) => Instruction::Nop,
+            (0x1, 0x0) => Instruction::Stop,
+            (0x0..=0x3, 0x1) => {
+                let target = match high_bits {
+                    0x0 => Load16Target::Register16(RegisterPair::Bc),
+                    0x1 => Load16Target::Register16(RegisterPair::De),
+                    0x2 => Load16Target::Register16(RegisterPair::Hl),
+                    0x3 => Load16Target::StackPointer,
+                    _ => panic!("Invalid opcode: {}", byte.is_ascii_hexdigit()),
+                };
+                let data: u16 =
+                    (memory.read_byte(pc + 1) as u16) << 8 | memory.read_byte(pc + 2) as u16;
+                Instruction::Load16(target, Load16Source::Data(data))
+            }
+            (0x0..=0x3, 0x2) => {
+                let target = match high_bits {
+                    0x0 => Load8Operand::AtReg16(RegisterPair::Bc),
+                    0x1 => Load8Operand::AtReg16(RegisterPair::De),
+                    0x2 => Load8Operand::AtHli,
+                    0x3 => Load8Operand::AtHld,
+                    _ => panic!("Invalid opcode: {}", byte),
+                };
+                Instruction::Load8(target, Load8Operand::Register(Register::A))
+            }
             _ => panic!(),
         }
     }
@@ -178,7 +202,7 @@ mod tests {
         assert_eq!(
             std::format!(
                 "{}",
-                Instruction::Ld8(Load8Operand::Register(Register::A), Load8Operand::AtC)
+                Instruction::Load8(Load8Operand::Register(Register::A), Load8Operand::AtC)
             ),
             "LD A,(C)"
         );
@@ -188,7 +212,7 @@ mod tests {
         assert_eq!(
             std::format!(
                 "{}",
-                Instruction::Ld16(
+                Instruction::Load16(
                     Load16Target::Register16(RegisterPair::Hl),
                     Load16Source::SpPlus(15)
                 )
@@ -306,5 +330,31 @@ mod tests {
     fn decode_nop_fails() {
         let memory = Memory::initialize();
         assert_ne!(Instruction::from_bytes(&memory, 0), Instruction::Stop);
+    }
+    #[test]
+    fn decode_ld8() {
+        let mut memory = Memory::initialize();
+        memory.bootrom[0] = 0x02;
+        assert_eq!(
+            Instruction::from_bytes(&memory, 0),
+            Instruction::Load8(
+                Load8Operand::AtReg16(RegisterPair::Bc),
+                Load8Operand::Register(Register::A)
+            )
+        );
+    }
+    #[test]
+    fn decode_ld16() {
+        let mut memory = Memory::initialize();
+        memory.bootrom[0] = 0x01;
+        memory.bootrom[1] = 0xAB;
+        memory.bootrom[2] = 0xCD;
+        assert_eq!(
+            Instruction::from_bytes(&memory, 0),
+            Instruction::Load16(
+                Load16Target::Register16(RegisterPair::Bc),
+                Load16Source::Data(0xABCD)
+            )
+        );
     }
 }
