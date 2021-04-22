@@ -135,11 +135,41 @@ impl Instruction {
             (0x2..=0x3, 0x7) => {
                 let data = memory.read_byte(a + 1);
                 let target = match high_bits {
-                    0x2 => Load8Operand::Register(Register::H),
-                    0x3 => Load8Operand::AtReg16(RegisterPair::Hl),
+                    0x2 => panic!("Haven't implemented DAA yet"),
+                    0x3 => panic!("Haven't implemented SCF yet"),
                     _ => panic!("Invalid opcode: {:#x}", byte),
                 };
                 Instruction::Load8(target, Load8Operand::Data(data))
+            }
+            (0x0, 0x8) => {
+                let address: u16 =
+                    (memory.read_byte(a + 1) as u16) | (memory.read_byte(a + 2) as u16) << 8;
+                Instruction::Load16(Load16Target::Address(address), Load16Source::StackPointer)
+            }
+            (0x1..=0x3, 0x8) => {
+                let offset = memory.read_byte(a + 1);
+                match high_bits {
+                    0x1 => Instruction::Jump(JumpKind::JumpRelative(offset)),
+                    0x2 => Instruction::Jump(JumpKind::JumpRelativeConditional(
+                        JumpCondition::Zero,
+                        offset,
+                    )),
+                    0x3 => Instruction::Jump(JumpKind::JumpRelativeConditional(
+                        JumpCondition::Carry,
+                        offset,
+                    )),
+                    _ => panic!("Invalid opcode: {:#x}", byte),
+                }
+            }
+            (0x0..=0x3, 0x9) => {
+                let operand = match high_bits {
+                    0x0 => PtrArithOperand::Register16(RegisterPair::Bc),
+                    0x1 => PtrArithOperand::Register16(RegisterPair::De),
+                    0x2 => PtrArithOperand::Register16(RegisterPair::Hl),
+                    0x3 => PtrArithOperand::StackPointer,
+                    _ => panic!("Invalid opcode: {:#x}", byte),
+                };
+                Instruction::AddPtr(PtrArithOperand::Register16(RegisterPair::Hl), operand)
             }
             (0x7, 0x6) => Instruction::Halt,
             (0x4..=0x7, 0x0..=0x7) => {
@@ -249,6 +279,7 @@ impl fmt::Display for Load16Target {
 
 #[derive(Debug, PartialEq)]
 pub enum Load16Source {
+    StackPointer,
     Data(u16),
     SpPlus(i8),
     Hl,
@@ -258,6 +289,7 @@ impl fmt::Display for Load16Source {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let operand_string = match self {
             Load16Source::Hl => String::from("HL"),
+            Load16Source::StackPointer => String::from("SP"),
             Load16Source::SpPlus(r8) => std::format!("SP+{}", r8),
             Load16Source::Data(data) => std::format!("${:#0x}", data),
         };
