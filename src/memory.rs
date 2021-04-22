@@ -8,7 +8,7 @@ impl Memory {
         Memory { bootrom }
     }
 
-    pub fn read_byte(&self, ptr: u16) -> u8 {
-        self.bootrom[ptr as usize]
+    pub fn read_byte(&self, address: u16) -> u8 {
+        self.bootrom[address as usize]
     }
 }
