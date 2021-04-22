@@ -178,6 +178,7 @@ impl fmt::Display for AddPtrOperand {
 }
 
 mod tests {
+    use crate::cpu::instruction::AddPtrOperand;
     use crate::cpu::instruction::ArithmeticOperand;
     use crate::cpu::instruction::Instruction;
     use crate::cpu::instruction::Load16Source;
@@ -277,6 +278,16 @@ mod tests {
         assert_eq!(
             std::format!("{}", Instruction::Decrement(ArithmeticOperand::D)),
             "DEC D"
+        );
+    }
+    #[test]
+    fn display_addptr() {
+        assert_eq!(
+            std::format!(
+                "{}",
+                Instruction::AddPtr(AddPtrOperand::StackPointer, AddPtrOperand::Data(25))
+            ),
+            "ADD SP,25"
         );
     }
 }
