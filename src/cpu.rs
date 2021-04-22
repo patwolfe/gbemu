@@ -18,7 +18,7 @@ impl Cpu {
         }
     }
     pub fn step(&mut self) {
-        self.pc = self.execute(Instruction::Ld);
+        self.pc = self.execute(Instruction::Nop);
     }
 
     pub fn execute(&mut self, instruction: Instruction) -> u16 {
