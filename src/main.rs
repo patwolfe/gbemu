@@ -3,6 +3,7 @@ use minifb::{Key, Scale, ScaleMode, Window, WindowOptions};
 
 mod cpu;
 mod gb;
+mod memory;
 
 use crate::cpu::Cpu;
 

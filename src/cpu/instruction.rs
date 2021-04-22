@@ -50,6 +50,12 @@ impl fmt::Display for Instruction {
     }
 }
 
+impl Instruction {
+    pub fn from_bytes(memory: &Box<[u8]>, pc: u16) -> Instruction {
+        Instruction::Nop
+    }
+}
+
 pub enum Load16Target {
     Bc,
     De,
