@@ -1,13 +1,16 @@
+use std::env;
+use std::fs::File;
+use std::io::Read;
+
 pub struct Memory {
-    pub bootrom: Box<[u8]>,
-    pub rom_bank0: Box<[u8]>,
-    pub rom_bank1: Box<[u8]>,
-    pub vram: Box<[u8]>,
-    pub eram: Box<[u8]>,
-    pub wram: Box<[u8]>,
-    pub oam: Box<[u8]>,
-    pub io: Box<[u8]>,
-    pub hram: Box<[u8]>,
+    pub rom_bank0: Vec<u8>,
+    pub rom_bank1: Vec<u8>,
+    pub vram: Vec<u8>,
+    pub eram: Vec<u8>,
+    pub wram: Vec<u8>,
+    pub oam: Vec<u8>,
+    pub io: Vec<u8>,
+    pub hram: Vec<u8>,
     pub interrupt_register: u8,
 }
 
@@ -31,19 +34,22 @@ pub const IR: u16 = 0xFFFF;
 
 impl Memory {
     pub fn initialize() -> Memory {
-        let bootrom = Box::new([0; 16]);
-        let rom_bank0 = Box::new([0; (ROM0_END - ROM0_START + 1) as usize]);
-        let rom_bank1 = Box::new([0; (ROM1_END - ROM1_START + 1) as usize]);
-        let vram = Box::new([0; (VRAM_END - VRAM_START + 1) as usize]);
-        let eram = Box::new([0; (ERAM_END - ERAM_START + 1) as usize]);
-        let wram = Box::new([0; (WRAM_END - WRAM_START + 1) as usize]);
-        let oam = Box::new([0; (OAM_END - OAM_START + 1) as usize]);
-        let io = Box::new([0; (IO_END - IO_START + 1) as usize]);
-        let hram = Box::new([0; (HRAM_END - HRAM_START + 1) as usize]);
+        let bootrom_path = env::var("BOOTROM").unwrap();
+        let mut rom_bank0 = vec![0; (ROM0_END - ROM0_START + 1) as usize];
+        File::open(bootrom_path)
+            .unwrap()
+            .read_exact(&mut rom_bank0.as_mut_slice()[0..=255])
+            .unwrap();
+        let rom_bank1 = vec![0; (ROM1_END - ROM1_START + 1) as usize];
+        let vram = vec![0; (VRAM_END - VRAM_START + 1) as usize];
+        let eram = vec![0; (ERAM_END - ERAM_START + 1) as usize];
+        let wram = vec![0; (WRAM_END - WRAM_START + 1) as usize];
+        let oam = vec![0; (OAM_END - OAM_START + 1) as usize];
+        let io = vec![0; (IO_END - IO_START + 1) as usize];
+        let hram = vec![0; (HRAM_END - HRAM_START + 1) as usize];
         let interrupt_register = 0;
 
         Memory {
-            bootrom,
             rom_bank0,
             rom_bank1,
             vram,

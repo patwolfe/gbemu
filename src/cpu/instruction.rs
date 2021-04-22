@@ -26,6 +26,7 @@ pub enum Instruction {
     AddPtr(PtrArithOperand, PtrArithOperand),
     IncrementPtr(PtrArithOperand),
     DecrementPtr(PtrArithOperand),
+    Jump(JumpType),
 }
 
 impl fmt::Display for Instruction {
@@ -75,7 +76,7 @@ impl Instruction {
                     _ => panic!("Invalid opcode: {:#x}", byte),
                 };
                 let data: u16 =
-                    (memory.read_byte(a + 1) as u16) << 8 | memory.read_byte(a + 2) as u16;
+                    (memory.read_byte(a + 1) as u16) | (memory.read_byte(a + 2) as u16) << 8;
                 Instruction::Load16(target, Load16Source::Data(data))
             }
             (0x0..=0x3, 0x2) => {
@@ -112,6 +113,116 @@ impl Instruction {
                     Instruction::Decrement(operand)
                 }
             }
+            (0x0..=0x3, 0x6) => {
+                let data = memory.read_byte(a + 1);
+                let target = match high_bits {
+                    0x0 => Load8Operand::Register(Register::B),
+                    0x1 => Load8Operand::Register(Register::D),
+                    0x2 => Load8Operand::Register(Register::H),
+                    0x3 => Load8Operand::AtReg16(RegisterPair::Hl),
+                    _ => panic!("Invalid opcode: {:#x}", byte),
+                };
+                Instruction::Load8(target, Load8Operand::Data(data))
+            }
+            (0x0..=0x1, 0x7) => {
+                let target = match high_bits {
+                    0x0 => panic!("Haven't implemented RLCA yet"),
+                    0x1 => panic!("Haven't implemented RLCA yet"),
+                    _ => panic!("Invalid opcode: {:#x}", byte),
+                };
+            }
+            (0x2..=0x3, 0x7) => {
+                let data = memory.read_byte(a + 1);
+                let target = match high_bits {
+                    0x2 => Load8Operand::Register(Register::H),
+                    0x3 => Load8Operand::AtReg16(RegisterPair::Hl),
+                    _ => panic!("Invalid opcode: {:#x}", byte),
+                };
+                Instruction::Load8(target, Load8Operand::Data(data))
+            }
+            (0x7, 0x6) => Instruction::Halt,
+            (0x4..=0x7, 0x0..=0x7) => {
+                let target = match high_bits {
+                    0x4 => Load8Operand::Register(Register::B),
+                    0x5 => Load8Operand::Register(Register::D),
+                    0x6 => Load8Operand::Register(Register::H),
+                    0x7 => Load8Operand::AtReg16(RegisterPair::Hl),
+                    _ => panic!("Invalid opcode: {:#x}", byte),
+                };
+                let source = match low_bits {
+                    0x0 => Load8Operand::Register(Register::B),
+                    0x1 => Load8Operand::Register(Register::C),
+                    0x2 => Load8Operand::Register(Register::D),
+                    0x3 => Load8Operand::Register(Register::E),
+                    0x4 => Load8Operand::Register(Register::H),
+                    0x5 => Load8Operand::Register(Register::L),
+                    0x6 => Load8Operand::AtReg16(RegisterPair::Hl),
+                    0x7 => Load8Operand::Register(Register::A),
+                    _ => panic!("Invalid opcode: {:#x}", byte),
+                };
+                Instruction::Load8(target, source)
+            }
+            (0x4..=0x7, 0x8..=0xF) => {
+                let target = match high_bits {
+                    0x4 => Load8Operand::Register(Register::C),
+                    0x5 => Load8Operand::Register(Register::E),
+                    0x6 => Load8Operand::Register(Register::L),
+                    0x7 => Load8Operand::Register(Register::A),
+                    _ => panic!("Invalid opcode: {:#x}", byte),
+                };
+                let source = match low_bits {
+                    0x8 => Load8Operand::Register(Register::B),
+                    0x9 => Load8Operand::Register(Register::C),
+                    0xA => Load8Operand::Register(Register::D),
+                    0xB => Load8Operand::Register(Register::E),
+                    0xC => Load8Operand::Register(Register::H),
+                    0xD => Load8Operand::Register(Register::L),
+                    0xE => Load8Operand::AtReg16(RegisterPair::Hl),
+                    0xF => Load8Operand::Register(Register::A),
+                    _ => panic!("Invalid opcode: {:#x}", byte),
+                };
+                Instruction::Load8(target, source)
+            }
+            (0x8..=0xB, 0x0..=0x7) => {
+                let operand = match low_bits {
+                    0x0 => ArithmeticOperand::Register(Register::B),
+                    0x1 => ArithmeticOperand::Register(Register::C),
+                    0x2 => ArithmeticOperand::Register(Register::D),
+                    0x3 => ArithmeticOperand::Register(Register::E),
+                    0x4 => ArithmeticOperand::Register(Register::H),
+                    0x5 => ArithmeticOperand::Register(Register::L),
+                    0x6 => ArithmeticOperand::AtHl,
+                    0x7 => ArithmeticOperand::Register(Register::A),
+                    _ => panic!("Invalid opcode: {:#x}", byte),
+                };
+                match high_bits {
+                    0x8 => Instruction::Add(operand),
+                    0x9 => Instruction::Sub(operand),
+                    0xA => Instruction::And(operand),
+                    0xB => Instruction::Or(operand),
+                    _ => panic!("Invalid opcode: {:#x}", byte),
+                }
+            }
+            (0x8..=0xB, 0x8..=0xF) => {
+                let operand = match low_bits {
+                    0x8 => ArithmeticOperand::Register(Register::B),
+                    0x9 => ArithmeticOperand::Register(Register::C),
+                    0xA => ArithmeticOperand::Register(Register::D),
+                    0xB => ArithmeticOperand::Register(Register::E),
+                    0xC => ArithmeticOperand::Register(Register::H),
+                    0xD => ArithmeticOperand::Register(Register::L),
+                    0xE => ArithmeticOperand::AtHl,
+                    0xF => ArithmeticOperand::Register(Register::A),
+                    _ => panic!("Invalid opcode: {:#x}", byte),
+                };
+                match high_bits {
+                    0x8 => Instruction::AddCarry(operand),
+                    0x9 => Instruction::SubCarry(operand),
+                    0xA => Instruction::Xor(operand),
+                    0xB => Instruction::Cp(operand),
+                    _ => panic!("Invalid opcode: {:#x}", byte),
+                }
+            }
             _ => panic!("Couldn't match opcode for {:#x}/{:#x}", high_bits, low_bits),
         }
     }
@@ -129,7 +240,7 @@ impl fmt::Display for Load16Target {
         let operand_string = match self {
             Load16Target::Register16(reg_pair) => std::format!("{}", reg_pair),
             Load16Target::StackPointer => String::from("SP"),
-            Load16Target::Address(data) => data.to_string(),
+            Load16Target::Address(data) => std::format!("${:#0x}", data),
         };
         write!(f, "{}", operand_string)
     }
@@ -147,7 +258,7 @@ impl fmt::Display for Load16Source {
         let operand_string = match self {
             Load16Source::Hl => String::from("HL"),
             Load16Source::SpPlus(r8) => std::format!("SP+{}", r8),
-            Load16Source::Data(data) => data.to_string(),
+            Load16Source::Data(data) => std::format!("${:#0x}", data),
         };
         write!(f, "{}", operand_string)
     }
@@ -156,11 +267,12 @@ impl fmt::Display for Load16Source {
 #[derive(Debug, PartialEq)]
 pub enum Load8Operand {
     Register(Register),
-    Address(u16),
+    AtAddress(u16),
     AtC,
     AtReg16(RegisterPair),
     AtHli,
     AtHld,
+    Data(u8),
 }
 
 impl fmt::Display for Load8Operand {
@@ -171,7 +283,8 @@ impl fmt::Display for Load8Operand {
             Load8Operand::AtReg16(reg_pair) => std::format!("({})", reg_pair),
             Load8Operand::AtHli => String::from("(HL+)"),
             Load8Operand::AtHld => String::from("(HL-)"),
-            Load8Operand::Address(a16) => std::format!("({})", a16),
+            Load8Operand::AtAddress(a16) => std::format!("({:#0x})", a16),
+            Load8Operand::Data(data) => std::format!("${:#0x}", data),
         };
         write!(f, "{}", operand_string)
     }
@@ -207,7 +320,7 @@ impl fmt::Display for PtrArithOperand {
         let operand_string = match self {
             PtrArithOperand::Register16(reg_pair) => std::format!("({})", reg_pair),
             PtrArithOperand::StackPointer => String::from("SP"),
-            PtrArithOperand::Data(i8) => std::format!("{}", i8),
+            PtrArithOperand::Data(i8) => std::format!("${}", i8),
         };
         write!(f, "{}", operand_string)
     }
@@ -345,12 +458,13 @@ mod tests {
                 "{}",
                 Instruction::AddPtr(PtrArithOperand::StackPointer, PtrArithOperand::Data(25))
             ),
-            "ADD SP,25"
+            "ADD SP,$25"
         );
     }
     #[test]
     fn decode_nop() {
-        let memory = Memory::initialize();
+        let mut memory = Memory::initialize();
+        memory.rom_bank0[0] = 0;
         assert_eq!(Instruction::from_bytes(&memory, 0), Instruction::Nop);
     }
     #[test]
@@ -380,8 +494,8 @@ mod tests {
     fn decode_ld16() {
         let mut memory = Memory::initialize();
         memory.rom_bank0[0] = 0x01;
-        memory.rom_bank0[1] = 0xAB;
-        memory.rom_bank0[2] = 0xCD;
+        memory.rom_bank0[1] = 0xCD;
+        memory.rom_bank0[2] = 0xAB;
         assert_eq!(
             Instruction::from_bytes(&memory, 0),
             Instruction::Load16(
@@ -415,6 +529,26 @@ mod tests {
         assert_eq!(
             Instruction::from_bytes(&memory, 0),
             Instruction::Decrement(ArithmeticOperand::AtHl)
+        );
+    }
+    #[test]
+    pub fn decode_bootrom() {
+        let memory = Memory::initialize();
+        println!("{:?}", memory.rom_bank0);
+        assert_eq!(
+            Instruction::from_bytes(&memory, 0),
+            Instruction::Load16(Load16Target::StackPointer, Load16Source::Data(0xFFFE))
+        );
+        assert_eq!(
+            Instruction::from_bytes(&memory, 3),
+            Instruction::Xor(ArithmeticOperand::Register(Register::A))
+        );
+        assert_eq!(
+            Instruction::from_bytes(&memory, 4),
+            Instruction::Load16(
+                Load16Target::Register16(RegisterPair::Hl),
+                Load16Source::Data(0x9FFF)
+            )
         );
     }
 }
