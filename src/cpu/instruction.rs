@@ -361,13 +361,13 @@ mod tests {
     #[test]
     fn decode_stop() {
         let mut memory = Memory::initialize();
-        memory.bootrom[0] = 0x10;
+        memory.rom_bank0[0] = 0x10;
         assert_eq!(Instruction::from_bytes(&memory, 0), Instruction::Stop);
     }
     #[test]
     fn decode_ld8() {
         let mut memory = Memory::initialize();
-        memory.bootrom[0] = 0x02;
+        memory.rom_bank0[0] = 0x02;
         assert_eq!(
             Instruction::from_bytes(&memory, 0),
             Instruction::Load8(
@@ -379,9 +379,9 @@ mod tests {
     #[test]
     fn decode_ld16() {
         let mut memory = Memory::initialize();
-        memory.bootrom[0] = 0x01;
-        memory.bootrom[1] = 0xAB;
-        memory.bootrom[2] = 0xCD;
+        memory.rom_bank0[0] = 0x01;
+        memory.rom_bank0[1] = 0xAB;
+        memory.rom_bank0[2] = 0xCD;
         assert_eq!(
             Instruction::from_bytes(&memory, 0),
             Instruction::Load16(
@@ -393,7 +393,7 @@ mod tests {
     #[test]
     fn decode_inc16() {
         let mut memory = Memory::initialize();
-        memory.bootrom[0] = 0x23;
+        memory.rom_bank0[0] = 0x23;
         assert_eq!(
             Instruction::from_bytes(&memory, 0),
             Instruction::IncrementPtr(PtrArithOperand::Register16(RegisterPair::Hl))
@@ -402,7 +402,7 @@ mod tests {
     #[test]
     fn decode_inc() {
         let mut memory = Memory::initialize();
-        memory.bootrom[0] = 0x24;
+        memory.rom_bank0[0] = 0x24;
         assert_eq!(
             Instruction::from_bytes(&memory, 0),
             Instruction::Increment(ArithmeticOperand::Register(Register::H))
@@ -411,7 +411,7 @@ mod tests {
     #[test]
     fn decode_dec() {
         let mut memory = Memory::initialize();
-        memory.bootrom[0] = 0x35;
+        memory.rom_bank0[0] = 0x35;
         assert_eq!(
             Instruction::from_bytes(&memory, 0),
             Instruction::Decrement(ArithmeticOperand::AtHl)
