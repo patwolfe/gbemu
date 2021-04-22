@@ -11,17 +11,35 @@ pub struct Memory {
     pub interrupt_register: u8,
 }
 
+pub const ROM0_START: u16 = 0x0000;
+pub const ROM0_END: u16 = 0x3FFF;
+pub const ROM1_START: u16 = 0x4000;
+pub const ROM1_END: u16 = 0x7FFF;
+pub const VRAM_START: u16 = 0x8000;
+pub const VRAM_END: u16 = 0x9FFF;
+pub const ERAM_START: u16 = 0xA000;
+pub const ERAM_END: u16 = 0xBFFF;
+pub const WRAM_START: u16 = 0xC000;
+pub const WRAM_END: u16 = 0xDFFF;
+pub const OAM_START: u16 = 0xFE00;
+pub const OAM_END: u16 = 0xFE9F;
+pub const IO_START: u16 = 0xFF00;
+pub const IO_END: u16 = 0xFF7F;
+pub const HRAM_START: u16 = 0xFF80;
+pub const HRAM_END: u16 = 0xFFFE;
+pub const IR: u16 = 0xFFFF;
+
 impl Memory {
     pub fn initialize() -> Memory {
         let bootrom = Box::new([0; 16]);
-        let rom_bank0 = Box::new([0; 0x4000]);
-        let rom_bank1 = Box::new([0; 0x4000]);
-        let vram = Box::new([0; 0x2000]);
-        let eram = Box::new([0; 0x2000]);
-        let wram = Box::new([0; 0x2000]);
-        let oam = Box::new([0; 0x100]);
-        let io = Box::new([0; 0x80]);
-        let hram = Box::new([0; 0]);
+        let rom_bank0 = Box::new([0; (ROM0_END - ROM0_START + 1) as usize]);
+        let rom_bank1 = Box::new([0; (ROM1_END - ROM1_START + 1) as usize]);
+        let vram = Box::new([0; (VRAM_END - VRAM_START + 1) as usize]);
+        let eram = Box::new([0; (ERAM_END - ERAM_START + 1) as usize]);
+        let wram = Box::new([0; (WRAM_END - WRAM_START + 1) as usize]);
+        let oam = Box::new([0; (OAM_END - OAM_START + 1) as usize]);
+        let io = Box::new([0; (IO_END - IO_START + 1) as usize]);
+        let hram = Box::new([0; (HRAM_END - HRAM_START + 1) as usize]);
         let interrupt_register = 0;
 
         Memory {
@@ -40,45 +58,45 @@ impl Memory {
 
     pub fn read_byte(&self, address: u16) -> u8 {
         match address {
-            0x0..=0x3FFF => self.rom_bank0[address as usize],
-            0x4000..=0x7FFF => self.rom_bank1[(address as usize) - 0x4000],
-            0x8000..=0x9FFF => self.vram[(address as usize) - 0x8000],
-            0xA000..=0xBFFF => self.eram[(address as usize) - 0xA000],
-            0xC000..=0xDFFF => self.wram[(address as usize) - 0xC000],
+            ROM0_START..=ROM0_END => self.rom_bank0[address as usize],
+            ROM1_START..=ROM1_END => self.rom_bank1[(address as usize) - 0x4000],
+            VRAM_START..=VRAM_END => self.vram[(address as usize) - 0x8000],
+            ERAM_START..=ERAM_END => self.eram[(address as usize) - 0xA000],
+            WRAM_START..=WRAM_END => self.wram[(address as usize) - 0xC000],
             0xE000..=0xFDFF => panic!(
                 "Address {:#0x} attempts to access prohibited region of memory",
                 address
             ),
-            0xFE00..=0xFE9F => self.oam[(address as usize) - 0xFE00],
+            OAM_START..=OAM_END => self.oam[(address as usize) - 0xFE00],
             0xFEA0..=0xFEFF => panic!(
                 "Address {:#0x} attempts to access prohibited region of memory",
                 address
             ),
-            0xFF00..=0xFF7F => self.io[(address as usize) - 0xFF00],
-            0xFF80..=0xFFFE => self.hram[(address as usize) - 0xFF80],
-            0xFFFF => self.interrupt_register,
+            IO_START..=IO_END => self.io[(address as usize) - 0xFF00],
+            HRAM_START..=HRAM_END => self.hram[(address as usize) - 0xFF80],
+            IR => self.interrupt_register,
         }
     }
 
     pub fn write_byte(&mut self, address: u16, value: u8) {
         match address {
-            0x0..=0x3FFF => self.rom_bank0[address as usize] = value,
-            0x4000..=0x7FFF => self.rom_bank1[(address as usize) - 0x4000] = value,
-            0x8000..=0x9FFF => self.vram[(address as usize) - 0x8000] = value,
-            0xA000..=0xBFFF => self.eram[(address as usize) - 0xA000] = value,
-            0xC000..=0xDFFF => self.wram[(address as usize) - 0xC000] = value,
+            ROM0_START..=ROM0_END => self.rom_bank0[address as usize] = value,
+            ROM1_START..=ROM1_END => self.rom_bank1[(address as usize) - 0x4000] = value,
+            VRAM_START..=VRAM_END => self.vram[(address as usize) - 0x8000] = value,
+            ERAM_START..=ERAM_END => self.eram[(address as usize) - 0xA000] = value,
+            WRAM_START..=WRAM_END => self.wram[(address as usize) - 0xC000] = value,
             0xE000..=0xFDFF => panic!(
                 "Address {:#0x} attempts to write to prohibited region of memory",
                 address
             ),
-            0xFE00..=0xFE9F => self.oam[(address as usize) - 0xFE00] = value,
+            OAM_START..=OAM_END => self.oam[(address as usize) - 0xFE00] = value,
             0xFEA0..=0xFEFF => panic!(
                 "Address {:#0x} attempts to write to prohibited region of memory",
                 address
             ),
-            0xFF00..=0xFF7F => self.io[(address as usize) - 0xFF00] = value,
-            0xFF80..=0xFFFE => self.hram[(address as usize) - 0xFF80] = value,
-            0xFFFF => self.interrupt_register = value,
+            IO_START..=IO_END => self.io[(address as usize) - 0xFF00] = value,
+            HRAM_START..=HRAM_END => self.hram[(address as usize) - 0xFF80] = value,
+            IR => self.interrupt_register = value,
         };
     }
 }
