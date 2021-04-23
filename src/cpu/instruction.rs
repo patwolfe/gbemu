@@ -654,6 +654,7 @@ impl Instruction {
                 }
                 ReturnKind::ReturnInterrupt => (1, Cycles::Cycles(4)),
             },
+            // TODO: Need to change this so (HL) 16 bit instructions take 4 cycles
             Instruction::Instruction16(_) => (2, Cycles::Cycles(2)),
         }
     }
