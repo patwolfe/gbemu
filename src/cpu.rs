@@ -16,7 +16,7 @@ impl Cpu {
     pub fn new() -> Cpu {
         Cpu {
             registers: Registers::new(),
-            pc: 0x0100,
+            pc: 0,
             sp: 0xFFFE,
             memory: Memory::initialize(),
         }
@@ -24,6 +24,7 @@ impl Cpu {
 
     pub fn step(&mut self) {
         let instruction = Instruction::from_bytes(&self.memory, self.pc);
+        println!("{}", instruction);
         self.pc = self.execute(&instruction);
     }
 

@@ -34,7 +34,7 @@ pub enum Instruction {
     SetCarryFlag,
     DecimalAdjust,
     Restart(u8),
-    Call(JumpCondition, u16),
+    Call(CallKind),
     Instruction16(Instruction16),
     Complement,
     FlipCarry,
@@ -73,7 +73,7 @@ impl fmt::Display for Instruction {
             Instruction::Rotate(kind) => std::format!("R{}A", kind),
             Instruction::SetCarryFlag => String::from("SCF"),
             Instruction::DecimalAdjust => String::from("DAA"),
-            Instruction::Call(cond, address) => std::format!("CALL {}, {}", cond, address),
+            Instruction::Call(kind) => std::format!("CALL {}", kind),
             Instruction::Restart(n) => std::format!("RST {}", n),
             Instruction::Return(kind) => std::format!("RET{}", kind),
             Instruction::Instruction16(instruction) => std::format!("{}", instruction),
@@ -90,6 +90,20 @@ impl Instruction {
         match (high_bits, low_bits) {
             (0x0, 0x0) => Instruction::Nop,
             (0x1, 0x0) => Instruction::Stop,
+            (0x2..=0x3, 0x0) => {
+                let offset = memory.read_byte(a + 1);
+                match high_bits {
+                    0x2 => Instruction::Jump(JumpKind::JumpRelativeConditional(
+                        JumpCondition::NonZero,
+                        offset,
+                    )),
+                    0x3 => Instruction::Jump(JumpKind::JumpRelativeConditional(
+                        JumpCondition::NonCarry,
+                        offset,
+                    )),
+                    _ => panic!("Invalid opcode: {:#x}", byte),
+                }
+            }
             (0x0..=0x3, 0x1) => {
                 let target = match high_bits {
                     0x0 => Load16Target::Register16(RegisterPair::Bc),
@@ -355,7 +369,7 @@ impl Instruction {
                     0xF => RegisterPair::Af,
                     _ => panic!("Invalid opcode: {:#x}", byte),
                 };
-                Instruction::Push(reg)
+                Instruction::Pop(reg)
             }
             (0xC..=0xD, 0x2) => {
                 let a16: u16 =
@@ -386,7 +400,7 @@ impl Instruction {
                     0xD => JumpCondition::NonCarry,
                     _ => panic!("Invalid opcode: {:#x}", byte),
                 };
-                Instruction::Call(cond, a16)
+                Instruction::Call(CallKind::CallConditional(a16, cond))
             }
             (0xC..=0xF, 0x5) => {
                 let reg = match high_bits {
@@ -396,7 +410,7 @@ impl Instruction {
                     0xF => RegisterPair::Af,
                     _ => panic!("Invalid opcode: {:#x}", byte),
                 };
-                Instruction::Pop(reg)
+                Instruction::Push(reg)
             }
             (0xC..=0xF, 0x6) => {
                 let d8 = memory.read_byte(a + 1);
@@ -471,13 +485,17 @@ impl Instruction {
                     0xD => JumpCondition::Carry,
                     _ => panic!("Invalid opcode: {:#x}", byte),
                 };
-                Instruction::Call(cond, a16)
+                Instruction::Call(CallKind::CallConditional(a16, cond))
             }
             (0xC, 0xB) => {
                 let suffix: u8 = memory.read_byte(a + 1);
                 Instruction::Instruction16(Instruction::decode_i16_suffix(suffix))
             }
-            (0xC..=0xF, 0xD) => {
+            (0xC, 0xD) => {
+                let a16 = memory.read_2_bytes(a + 1);
+                Instruction::Call(CallKind::Call(a16))
+            }
+            (0xC..=0xF, 0xE) => {
                 let d8 = memory.read_byte(a + 1);
                 match high_bits {
                     0xC => Instruction::AddCarry(ArithmeticOperand::Data(d8)),
@@ -575,12 +593,10 @@ impl Instruction {
                 (Load8Operand::AtReg16(RegisterPair::Hl), Load8Operand::Data(_)) => {
                     (2, Cycles::Cycles(3))
                 }
-                (Load8Operand::AtReg16(RegisterPair::Hl), Load8Operand::Register(_)) => {
-                    (1, Cycles::Cycles(2))
-                }
-                (Load8Operand::Register(_), Load8Operand::AtReg16(RegisterPair::Hl)) => {
-                    (1, Cycles::Cycles(2))
-                }
+                (Load8Operand::AtReg16(_), Load8Operand::Register(_)) => (1, Cycles::Cycles(2)),
+                (Load8Operand::Register(_), Load8Operand::AtReg16(_)) => (1, Cycles::Cycles(2)),
+                (Load8Operand::AtC, Load8Operand::Register(_)) => (1, Cycles::Cycles(2)),
+                (Load8Operand::Register(_), Load8Operand::AtC) => (1, Cycles::Cycles(2)),
                 (Load8Operand::AtAddress8(_), _) | (_, Load8Operand::AtAddress8(_)) => {
                     (2, Cycles::Cycles(3))
                 }
@@ -627,7 +643,10 @@ impl Instruction {
             Instruction::Rotate(_) => (1, Cycles::Cycles(1)),
             Instruction::SetCarryFlag => (1, Cycles::Cycles(1)),
             Instruction::DecimalAdjust => (1, Cycles::Cycles(1)),
-            Instruction::Call(_, _) => (3, Cycles::ConditionalCycles(6, 3)),
+            Instruction::Call(kind) => match kind {
+                CallKind::CallConditional(_, _) => (3, Cycles::ConditionalCycles(6, 3)),
+                CallKind::Call(_) => (3, Cycles::Cycles(6)),
+            },
             Instruction::Restart(_) => (1, Cycles::Cycles(4)),
             Instruction::Return(kind) => match kind {
                 ReturnKind::Return | ReturnKind::ReturnConditional(_) => {
@@ -635,7 +654,7 @@ impl Instruction {
                 }
                 ReturnKind::ReturnInterrupt => (1, Cycles::Cycles(4)),
             },
-            Instruction::Instruction16(_) => (3, Cycles::Cycles(6)),
+            Instruction::Instruction16(_) => (2, Cycles::Cycles(2)),
         }
     }
 }
@@ -871,6 +890,22 @@ impl fmt::Display for RotateKind {
             RotateKind::LeftCarry => String::from("LC"),
             RotateKind::Right => String::from("R"),
             RotateKind::RightCarry => String::from("RC"),
+        };
+        write!(f, "{}", kind_string)
+    }
+}
+
+#[derive(Debug, PartialEq)]
+pub enum CallKind {
+    Call(u16),
+    CallConditional(u16, JumpCondition),
+}
+
+impl fmt::Display for CallKind {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let kind_string = match self {
+            CallKind::Call(a16) => std::format!("{}", a16),
+            CallKind::CallConditional(a16, cond) => std::format!("{} {}", a16, cond),
         };
         write!(f, "{}", kind_string)
     }
