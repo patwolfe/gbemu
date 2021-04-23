@@ -1,6 +1,5 @@
 extern crate minifb;
 use minifb::{Key, Scale, ScaleMode, Window, WindowOptions};
-use std::env;
 
 mod cpu;
 mod gb;

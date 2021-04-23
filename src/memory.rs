@@ -84,6 +84,10 @@ impl Memory {
         }
     }
 
+    pub fn read_2_bytes(&self, a: u16) -> u16 {
+        (self.read_byte(a + 1) as u16) | (self.read_byte(a + 2) as u16) << 8
+    }
+
     pub fn write_byte(&mut self, address: u16, value: u8) {
         match address {
             ROM0_START..=ROM0_END => self.rom_bank0[address as usize] = value,
