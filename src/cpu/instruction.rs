@@ -850,8 +850,6 @@ impl fmt::Display for Instruction16 {
             Instruction16::BitwiseComplement(val, reg) => std::format!("BIT {} {}", val, reg),
             Instruction16::Reset(val, reg) => std::format!("BIT {} {}", val, reg),
             Instruction16::Set(val, reg) => std::format!("Set {} {}", val, reg),
-            Instruction16::Swap(reg) => std::format!("SWAP {}", reg),
-            Instruction16::Swap(reg) => std::format!("SWAP {}", reg),
         };
         write!(f, "{}", kind_string)
     }
