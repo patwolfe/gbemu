@@ -1,2 +1,3 @@
 /target
-DMG_ROM.bin
+*.bin
+*.txt
