@@ -563,6 +563,98 @@ impl Instruction {
             _ => panic!("Invalid 16 bit instruction suffix: {:#x}", suffix),
         }
     }
+
+    pub fn size_and_cycles(i: &Instruction) -> (u8, Cycles) {
+        match i {
+            Instruction::Nop => (1, Cycles::Cycles(1)),
+            Instruction::Stop => (2, Cycles::Cycles(1)),
+            Instruction::Halt => (1, Cycles::Cycles(1)),
+            Instruction::Di => (1, Cycles::Cycles(1)),
+            Instruction::Ei => (1, Cycles::Cycles(1)),
+            Instruction::Complement => (1, Cycles::Cycles(1)),
+            Instruction::FlipCarry => (1, Cycles::Cycles(1)),
+            Instruction::Load16(target, source) => match (target, source) {
+                (_, Load16Source::Data(_)) => (3, Cycles::Cycles(3)),
+                (Load16Target::Address(_), Load16Source::StackPointer) => (3, Cycles::Cycles(5)),
+                (_, Load16Source::SpPlus(_)) => (2, Cycles::Cycles(3)),
+                _ => (1, Cycles::Cycles(2)),
+            },
+            Instruction::Load8(target, source) => match (target, source) {
+                (Load8Operand::Register(_), Load8Operand::Register(_)) => (1, Cycles::Cycles(1)),
+                (Load8Operand::AtHli, _) | (_, Load8Operand::AtHli) => (1, Cycles::Cycles(2)),
+                (Load8Operand::AtHld, _) | (_, Load8Operand::AtHld) => (1, Cycles::Cycles(2)),
+                (Load8Operand::Register(_), Load8Operand::Data(_)) => (2, Cycles::Cycles(2)),
+                (Load8Operand::AtReg16(RegisterPair::Hl), Load8Operand::Data(_)) => {
+                    (2, Cycles::Cycles(3))
+                }
+                (Load8Operand::AtReg16(RegisterPair::Hl), Load8Operand::Register(_)) => {
+                    (1, Cycles::Cycles(2))
+                }
+                (Load8Operand::Register(_), Load8Operand::AtReg16(RegisterPair::Hl)) => {
+                    (1, Cycles::Cycles(2))
+                }
+                (Load8Operand::AtAddress8(_), _) | (_, Load8Operand::AtAddress8(_)) => {
+                    (2, Cycles::Cycles(3))
+                }
+                (Load8Operand::AtAddress16(_), _) | (_, Load8Operand::AtAddress16(_)) => {
+                    (3, Cycles::Cycles(4))
+                }
+                _ => panic!("Can't figure out size of {}", i),
+            },
+            // All arithmetic ops share size/cycle properties based on operand
+            Instruction::Add(operand)
+            | Instruction::Sub(operand)
+            | Instruction::AddCarry(operand)
+            | Instruction::SubCarry(operand)
+            | Instruction::And(operand)
+            | Instruction::Or(operand)
+            | Instruction::Xor(operand)
+            | Instruction::Compare(operand) => match operand {
+                ArithmeticOperand::Register(_) => (1, Cycles::Cycles(1)),
+                ArithmeticOperand::AtHl => (1, Cycles::Cycles(2)),
+                ArithmeticOperand::Data(_) => (2, Cycles::Cycles(2)),
+            },
+            Instruction::Increment(target) | Instruction::Decrement(target) => match target {
+                ArithmeticOperand::Register(_) => (1, Cycles::Cycles(1)),
+                ArithmeticOperand::AtHl => (1, Cycles::Cycles(3)),
+                _ => panic!("Can't figure out size of {}", i),
+            },
+            Instruction::AddPtr(operand1, _) => match operand1 {
+                PtrArithOperand::Register16(_) => (1, Cycles::Cycles(2)),
+                PtrArithOperand::StackPointer => (2, Cycles::Cycles(4)),
+                _ => panic!("Can't figure out size of {}", i),
+            },
+            Instruction::IncrementPtr(_) | Instruction::DecrementPtr(_) => (1, Cycles::Cycles(2)),
+            Instruction::Jump(kind) => match kind {
+                JumpKind::Jump(_) => (3, Cycles::Cycles(4)),
+                JumpKind::JumpConditional(_, _) => (3, Cycles::ConditionalCycles(4, 3)),
+                JumpKind::JumpRelative(_) => (2, Cycles::Cycles(4)),
+                JumpKind::JumpRelativeConditional(_, _) => (2, Cycles::ConditionalCycles(3, 2)),
+                JumpKind::JumpHl => (1, Cycles::Cycles(1)),
+            },
+            Instruction::EnableInterrupts => (1, Cycles::Cycles(1)),
+            Instruction::DisableInterrupts => (1, Cycles::Cycles(1)),
+            Instruction::Pop(_) => (1, Cycles::Cycles(3)),
+            Instruction::Push(_) => (1, Cycles::Cycles(3)),
+            Instruction::Rotate(_) => (1, Cycles::Cycles(1)),
+            Instruction::SetCarryFlag => (1, Cycles::Cycles(1)),
+            Instruction::DecimalAdjust => (1, Cycles::Cycles(1)),
+            Instruction::Call(_, _) => (3, Cycles::ConditionalCycles(6, 3)),
+            Instruction::Restart(n) => (1, Cycles::Cycles(4)),
+            Instruction::Return(kind) => match kind {
+                ReturnKind::Return | ReturnKind::ReturnConditional(_) => {
+                    (1, Cycles::ConditionalCycles(5, 2))
+                }
+                ReturnKind::ReturnInterrupt => (1, Cycles::Cycles(4)),
+            },
+            Instruction::Instruction16(_) => (3, Cycles::Cycles(6)),
+        }
+    }
+}
+
+pub enum Cycles {
+    Cycles(u8),
+    ConditionalCycles(u8, u8),
 }
 
 #[derive(Debug, PartialEq)]
