@@ -24,11 +24,12 @@ impl Cpu {
 
     pub fn step(&mut self) {
         let instruction = Instruction::from_bytes(&self.memory, self.pc);
-        self.pc = self.execute(instruction);
+        self.pc = self.execute(&instruction);
     }
 
-    fn execute(&mut self, _instruction: Instruction) -> u16 {
-        self.pc + 1
+    fn execute(&mut self, i: &Instruction) -> u16 {
+        let (size, _cycles) = Instruction::size_and_cycles(i);
+        self.pc + size as u16
     }
 }
 
@@ -38,14 +39,6 @@ mod test {
     #[test]
     fn execute_nop() {
         let mut cpu = Cpu::new();
-        assert_eq!(cpu.pc + 1, cpu.execute(Instruction::Nop));
-    }
-    #[test]
-    fn step_nop() {
-        let mut cpu = Cpu::new();
-        cpu.pc = 0;
-        let old_pc = cpu.pc;
-        cpu.step();
-        assert_eq!(cpu.pc, old_pc + 1);
+        assert_eq!(cpu.pc + 1, cpu.execute(&Instruction::Nop));
     }
 }
