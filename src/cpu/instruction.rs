@@ -9,8 +9,6 @@ pub enum Instruction {
     Nop,
     Stop,
     Halt,
-    Di,
-    Ei,
     Load16(Load16Target, Load16Source),
     Load8(Load8Operand, Load8Operand),
     Add(ArithmeticOperand),
@@ -48,8 +46,6 @@ impl fmt::Display for Instruction {
             Instruction::Nop => String::from("NOP"),
             Instruction::Stop => String::from("STOP"),
             Instruction::Halt => String::from("HALT"),
-            Instruction::Di => String::from("DI"),
-            Instruction::Ei => String::from("EI"),
             Instruction::Complement => String::from("CPL"),
             Instruction::FlipCarry => String::from("CCF"),
             Instruction::Load16(target, source) => std::format!("LD {},{}", target, source),
@@ -356,7 +352,7 @@ impl Instruction {
                     0xC => RegisterPair::Bc,
                     0xD => RegisterPair::De,
                     0xE => RegisterPair::Hl,
-                    0xF => RegisterPair::Hl,
+                    0xF => RegisterPair::Af,
                     _ => panic!("Invalid opcode: {:#x}", byte),
                 };
                 Instruction::Push(reg)
@@ -372,14 +368,8 @@ impl Instruction {
                 Instruction::Jump(JumpKind::JumpConditional(cond, a16))
             }
             (0xE..=0xF, 0x2) => match high_bits {
-                0xE => Instruction::Load8(
-                    Load8Operand::Register(Register::C),
-                    Load8Operand::Register(Register::A),
-                ),
-                0xF => Instruction::Load8(
-                    Load8Operand::Register(Register::A),
-                    Load8Operand::Register(Register::C),
-                ),
+                0xE => Instruction::Load8(Load8Operand::AtC, Load8Operand::Register(Register::A)),
+                0xF => Instruction::Load8(Load8Operand::Register(Register::A), Load8Operand::AtC),
                 _ => panic!("Invalid opcode: {:#x}", byte),
             },
             (0xC, 0x3) => {
@@ -388,7 +378,7 @@ impl Instruction {
                 Instruction::Jump(JumpKind::Jump(a16))
             }
             (0xF, 0x3) => Instruction::DisableInterrupts,
-            (0xF, 0xB) => Instruction::DisableInterrupts,
+            (0xF, 0xB) => Instruction::EnableInterrupts,
             (0xC..=0xD, 0x4) => {
                 let a16: u16 = memory.read_2_bytes(a + 1);
                 let cond = match high_bits {
@@ -403,7 +393,7 @@ impl Instruction {
                     0xC => RegisterPair::Bc,
                     0xD => RegisterPair::De,
                     0xE => RegisterPair::Hl,
-                    0xF => RegisterPair::Hl,
+                    0xF => RegisterPair::Af,
                     _ => panic!("Invalid opcode: {:#x}", byte),
                 };
                 Instruction::Pop(reg)
@@ -569,8 +559,6 @@ impl Instruction {
             Instruction::Nop => (1, Cycles::Cycles(1)),
             Instruction::Stop => (2, Cycles::Cycles(1)),
             Instruction::Halt => (1, Cycles::Cycles(1)),
-            Instruction::Di => (1, Cycles::Cycles(1)),
-            Instruction::Ei => (1, Cycles::Cycles(1)),
             Instruction::Complement => (1, Cycles::Cycles(1)),
             Instruction::FlipCarry => (1, Cycles::Cycles(1)),
             Instruction::Load16(target, source) => match (target, source) {
@@ -640,7 +628,7 @@ impl Instruction {
             Instruction::SetCarryFlag => (1, Cycles::Cycles(1)),
             Instruction::DecimalAdjust => (1, Cycles::Cycles(1)),
             Instruction::Call(_, _) => (3, Cycles::ConditionalCycles(6, 3)),
-            Instruction::Restart(n) => (1, Cycles::Cycles(4)),
+            Instruction::Restart(_) => (1, Cycles::Cycles(4)),
             Instruction::Return(kind) => match kind {
                 ReturnKind::Return | ReturnKind::ReturnConditional(_) => {
                     (1, Cycles::ConditionalCycles(5, 2))
@@ -652,9 +640,22 @@ impl Instruction {
     }
 }
 
+#[derive(Debug, PartialEq)]
 pub enum Cycles {
     Cycles(u8),
     ConditionalCycles(u8, u8),
+}
+
+impl fmt::Display for Cycles {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let cycles_string = match self {
+            Cycles::Cycles(cycles) => std::format!("{}", cycles),
+            Cycles::ConditionalCycles(cycles_taken, cycles_not_taken) => {
+                std::format!("{}/{}", cycles_taken, cycles_not_taken)
+            }
+        };
+        write!(f, "{}", cycles_string)
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -1107,6 +1108,17 @@ mod tests {
             Instruction::Instruction16(Instruction16::BitwiseComplement(
                 7,
                 ArithmeticOperand::Register(Register::H)
+            ))
+        );
+    }
+
+    #[test]
+    pub fn load16_metadat() {
+        assert_eq!(
+            (3, Cycles::Cycles(3)),
+            Instruction::size_and_cycles(&Instruction::Load16(
+                Load16Target::Register16(RegisterPair::Hl),
+                Load16Source::Data(0x9FFF)
             ))
         );
     }
