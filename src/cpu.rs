@@ -25,7 +25,7 @@ impl Cpu {
         }
     }
 
-    pub fn step(&mut self) {
+    pub fn step(&mut self, _framebuffer: &mut Vec<u32>) {
         let instruction = Instruction::from_bytes(&self.memory, self.pc);
         println!("{}", instruction);
         self.pc = self.execute(&instruction);
