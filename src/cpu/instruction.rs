@@ -3,6 +3,7 @@ use std::fmt;
 use crate::cpu::registers::Register;
 use crate::cpu::registers::RegisterPair;
 use crate::memory::Memory;
+use crate::timer;
 
 #[derive(Debug, PartialEq)]
 pub enum Instruction {
@@ -572,36 +573,48 @@ impl Instruction {
         }
     }
 
-    pub fn size_and_cycles(i: &Instruction) -> (u8, Cycles) {
+    pub fn size_and_cycles(i: &Instruction) -> (u8, timer::Cycles) {
         match i {
-            Instruction::Nop => (1, Cycles::Cycles(1)),
-            Instruction::Stop => (2, Cycles::Cycles(1)),
-            Instruction::Halt => (1, Cycles::Cycles(1)),
-            Instruction::Complement => (1, Cycles::Cycles(1)),
-            Instruction::FlipCarry => (1, Cycles::Cycles(1)),
+            Instruction::Nop => (1, timer::Cycles::Cycles(1)),
+            Instruction::Stop => (2, timer::Cycles::Cycles(1)),
+            Instruction::Halt => (1, timer::Cycles::Cycles(1)),
+            Instruction::Complement => (1, timer::Cycles::Cycles(1)),
+            Instruction::FlipCarry => (1, timer::Cycles::Cycles(1)),
             Instruction::Load16(target, source) => match (target, source) {
-                (_, Load16Source::Data(_)) => (3, Cycles::Cycles(3)),
-                (Load16Target::Address(_), Load16Source::StackPointer) => (3, Cycles::Cycles(5)),
-                (_, Load16Source::SpPlus(_)) => (2, Cycles::Cycles(3)),
-                _ => (1, Cycles::Cycles(2)),
+                (_, Load16Source::Data(_)) => (3, timer::Cycles::Cycles(3)),
+                (Load16Target::Address(_), Load16Source::StackPointer) => {
+                    (3, timer::Cycles::Cycles(5))
+                }
+                (_, Load16Source::SpPlus(_)) => (2, timer::Cycles::Cycles(3)),
+                _ => (1, timer::Cycles::Cycles(2)),
             },
             Instruction::Load8(target, source) => match (target, source) {
-                (Load8Operand::Register(_), Load8Operand::Register(_)) => (1, Cycles::Cycles(1)),
-                (Load8Operand::AtHli, _) | (_, Load8Operand::AtHli) => (1, Cycles::Cycles(2)),
-                (Load8Operand::AtHld, _) | (_, Load8Operand::AtHld) => (1, Cycles::Cycles(2)),
-                (Load8Operand::Register(_), Load8Operand::Data(_)) => (2, Cycles::Cycles(2)),
-                (Load8Operand::AtReg16(RegisterPair::Hl), Load8Operand::Data(_)) => {
-                    (2, Cycles::Cycles(3))
+                (Load8Operand::Register(_), Load8Operand::Register(_)) => {
+                    (1, timer::Cycles::Cycles(1))
                 }
-                (Load8Operand::AtReg16(_), Load8Operand::Register(_)) => (1, Cycles::Cycles(2)),
-                (Load8Operand::Register(_), Load8Operand::AtReg16(_)) => (1, Cycles::Cycles(2)),
-                (Load8Operand::AtC, Load8Operand::Register(_)) => (1, Cycles::Cycles(2)),
-                (Load8Operand::Register(_), Load8Operand::AtC) => (1, Cycles::Cycles(2)),
+                (Load8Operand::AtHli, _) | (_, Load8Operand::AtHli) => {
+                    (1, timer::Cycles::Cycles(2))
+                }
+                (Load8Operand::AtHld, _) | (_, Load8Operand::AtHld) => {
+                    (1, timer::Cycles::Cycles(2))
+                }
+                (Load8Operand::Register(_), Load8Operand::Data(_)) => (2, timer::Cycles::Cycles(2)),
+                (Load8Operand::AtReg16(RegisterPair::Hl), Load8Operand::Data(_)) => {
+                    (2, timer::Cycles::Cycles(3))
+                }
+                (Load8Operand::AtReg16(_), Load8Operand::Register(_)) => {
+                    (1, timer::Cycles::Cycles(2))
+                }
+                (Load8Operand::Register(_), Load8Operand::AtReg16(_)) => {
+                    (1, timer::Cycles::Cycles(2))
+                }
+                (Load8Operand::AtC, Load8Operand::Register(_)) => (1, timer::Cycles::Cycles(2)),
+                (Load8Operand::Register(_), Load8Operand::AtC) => (1, timer::Cycles::Cycles(2)),
                 (Load8Operand::AtAddress8(_), _) | (_, Load8Operand::AtAddress8(_)) => {
-                    (2, Cycles::Cycles(3))
+                    (2, timer::Cycles::Cycles(3))
                 }
                 (Load8Operand::AtAddress16(_), _) | (_, Load8Operand::AtAddress16(_)) => {
-                    (3, Cycles::Cycles(4))
+                    (3, timer::Cycles::Cycles(4))
                 }
                 _ => panic!("Can't figure out size of {}", i),
             },
@@ -614,67 +627,53 @@ impl Instruction {
             | Instruction::Or(operand)
             | Instruction::Xor(operand)
             | Instruction::Compare(operand) => match operand {
-                ArithmeticOperand::Register(_) => (1, Cycles::Cycles(1)),
-                ArithmeticOperand::AtHl => (1, Cycles::Cycles(2)),
-                ArithmeticOperand::Data(_) => (2, Cycles::Cycles(2)),
+                ArithmeticOperand::Register(_) => (1, timer::Cycles::Cycles(1)),
+                ArithmeticOperand::AtHl => (1, timer::Cycles::Cycles(2)),
+                ArithmeticOperand::Data(_) => (2, timer::Cycles::Cycles(2)),
             },
             Instruction::Increment(target) | Instruction::Decrement(target) => match target {
-                ArithmeticOperand::Register(_) => (1, Cycles::Cycles(1)),
-                ArithmeticOperand::AtHl => (1, Cycles::Cycles(3)),
+                ArithmeticOperand::Register(_) => (1, timer::Cycles::Cycles(1)),
+                ArithmeticOperand::AtHl => (1, timer::Cycles::Cycles(3)),
                 _ => panic!("Can't figure out size of {}", i),
             },
             Instruction::AddPtr(operand1, _) => match operand1 {
-                PtrArithOperand::Register16(_) => (1, Cycles::Cycles(2)),
-                PtrArithOperand::StackPointer => (2, Cycles::Cycles(4)),
+                PtrArithOperand::Register16(_) => (1, timer::Cycles::Cycles(2)),
+                PtrArithOperand::StackPointer => (2, timer::Cycles::Cycles(4)),
                 _ => panic!("Can't figure out size of {}", i),
             },
-            Instruction::IncrementPtr(_) | Instruction::DecrementPtr(_) => (1, Cycles::Cycles(2)),
+            Instruction::IncrementPtr(_) | Instruction::DecrementPtr(_) => {
+                (1, timer::Cycles::Cycles(2))
+            }
             Instruction::Jump(kind) => match kind {
-                JumpKind::Jump(_) => (3, Cycles::Cycles(4)),
-                JumpKind::JumpConditional(_, _) => (3, Cycles::ConditionalCycles(4, 3)),
-                JumpKind::JumpRelative(_) => (2, Cycles::Cycles(4)),
-                JumpKind::JumpRelativeConditional(_, _) => (2, Cycles::ConditionalCycles(3, 2)),
-                JumpKind::JumpHl => (1, Cycles::Cycles(1)),
+                JumpKind::Jump(_) => (3, timer::Cycles::Cycles(4)),
+                JumpKind::JumpConditional(_, _) => (3, timer::Cycles::ConditionalCycles(4, 3)),
+                JumpKind::JumpRelative(_) => (2, timer::Cycles::Cycles(4)),
+                JumpKind::JumpRelativeConditional(_, _) => {
+                    (2, timer::Cycles::ConditionalCycles(3, 2))
+                }
+                JumpKind::JumpHl => (1, timer::Cycles::Cycles(1)),
             },
-            Instruction::EnableInterrupts => (1, Cycles::Cycles(1)),
-            Instruction::DisableInterrupts => (1, Cycles::Cycles(1)),
-            Instruction::Pop(_) => (1, Cycles::Cycles(3)),
-            Instruction::Push(_) => (1, Cycles::Cycles(3)),
-            Instruction::Rotate(_) => (1, Cycles::Cycles(1)),
-            Instruction::SetCarryFlag => (1, Cycles::Cycles(1)),
-            Instruction::DecimalAdjust => (1, Cycles::Cycles(1)),
+            Instruction::EnableInterrupts => (1, timer::Cycles::Cycles(1)),
+            Instruction::DisableInterrupts => (1, timer::Cycles::Cycles(1)),
+            Instruction::Pop(_) => (1, timer::Cycles::Cycles(3)),
+            Instruction::Push(_) => (1, timer::Cycles::Cycles(3)),
+            Instruction::Rotate(_) => (1, timer::Cycles::Cycles(1)),
+            Instruction::SetCarryFlag => (1, timer::Cycles::Cycles(1)),
+            Instruction::DecimalAdjust => (1, timer::Cycles::Cycles(1)),
             Instruction::Call(kind) => match kind {
-                CallKind::CallConditional(_, _) => (3, Cycles::ConditionalCycles(6, 3)),
-                CallKind::Call(_) => (3, Cycles::Cycles(6)),
+                CallKind::CallConditional(_, _) => (3, timer::Cycles::ConditionalCycles(6, 3)),
+                CallKind::Call(_) => (3, timer::Cycles::Cycles(6)),
             },
-            Instruction::Restart(_) => (1, Cycles::Cycles(4)),
+            Instruction::Restart(_) => (1, timer::Cycles::Cycles(4)),
             Instruction::Return(kind) => match kind {
                 ReturnKind::Return | ReturnKind::ReturnConditional(_) => {
-                    (1, Cycles::ConditionalCycles(5, 2))
+                    (1, timer::Cycles::ConditionalCycles(5, 2))
                 }
-                ReturnKind::ReturnInterrupt => (1, Cycles::Cycles(4)),
+                ReturnKind::ReturnInterrupt => (1, timer::Cycles::Cycles(4)),
             },
             // TODO: Need to change this so (HL) 16 bit instructions take 4 cycles
-            Instruction::Instruction16(_) => (2, Cycles::Cycles(2)),
+            Instruction::Instruction16(_) => (2, timer::Cycles::Cycles(2)),
         }
-    }
-}
-
-#[derive(Debug, PartialEq)]
-pub enum Cycles {
-    Cycles(u8),
-    ConditionalCycles(u8, u8),
-}
-
-impl fmt::Display for Cycles {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let cycles_string = match self {
-            Cycles::Cycles(cycles) => std::format!("{}", cycles),
-            Cycles::ConditionalCycles(cycles_taken, cycles_not_taken) => {
-                std::format!("{}/{}", cycles_taken, cycles_not_taken)
-            }
-        };
-        write!(f, "{}", cycles_string)
     }
 }
 
@@ -1151,7 +1150,7 @@ mod tests {
     #[test]
     pub fn load16_metadat() {
         assert_eq!(
-            (3, Cycles::Cycles(3)),
+            (3, timer::Cycles::Cycles(3)),
             Instruction::size_and_cycles(&Instruction::Load16(
                 Load16Target::Register16(RegisterPair::Hl),
                 Load16Source::Data(0x9FFF)

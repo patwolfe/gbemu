@@ -5,6 +5,7 @@ mod cpu;
 mod gb;
 mod memory;
 mod ppu;
+mod timer;
 
 use crate::cpu::Cpu;
 
