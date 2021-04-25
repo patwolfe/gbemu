@@ -4,12 +4,14 @@ mod registers;
 use crate::cpu::instruction::Instruction;
 use crate::cpu::registers::Registers;
 use crate::memory::Memory;
+use crate::ppu::Ppu;
 
 pub struct Cpu {
     registers: Registers,
     pc: u16,
     sp: u16,
     memory: Memory,
+    ppu: Ppu,
 }
 
 impl Cpu {
@@ -19,6 +21,7 @@ impl Cpu {
             pc: 0,
             sp: 0xFFFE,
             memory: Memory::initialize(),
+            ppu: Ppu::new(),
         }
     }
 

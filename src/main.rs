@@ -4,6 +4,7 @@ use minifb::{Key, Scale, ScaleMode, Window, WindowOptions};
 mod cpu;
 mod gb;
 mod memory;
+mod ppu;
 
 use crate::cpu::Cpu;
 
