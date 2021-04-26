@@ -23,6 +23,13 @@ pub enum Register {
     F,
 }
 
+pub enum Flag {
+    Zero,
+    Subtract,
+    HalfCarry,
+    Carry,
+}
+
 impl fmt::Display for Register {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let register_string = match self {
@@ -73,7 +80,7 @@ impl Registers {
         }
     }
 
-    pub fn get(&self, reg: Register) -> u8 {
+    pub fn get(&self, reg: &Register) -> u8 {
         match reg {
             Register::A => self.a,
             Register::B => self.b,
@@ -86,7 +93,7 @@ impl Registers {
         }
     }
 
-    pub fn set(&mut self, reg: Register, value: u8) {
+    pub fn set(&mut self, reg: &Register, value: u8) {
         match reg {
             Register::A => self.a = value,
             Register::B => self.b = value,
@@ -99,7 +106,7 @@ impl Registers {
         }
     }
 
-    pub fn get_16bit(self: &Registers, reg_pair: RegisterPair) -> u16 {
+    pub fn get_16bit(self: &Registers, reg_pair: &RegisterPair) -> u16 {
         match reg_pair {
             RegisterPair::Af => Registers::get_combined_value(self.a, self.f),
             RegisterPair::Bc => Registers::get_combined_value(self.b, self.c),
@@ -112,14 +119,15 @@ impl Registers {
         (r1 as u16) << 8 | r2 as u16
     }
 
-    pub fn set_16bit(&mut self, reg_pair: RegisterPair, value: u16) {
+    pub fn set_16bit(&mut self, reg_pair: &RegisterPair, value: u16) {
         let r1 = (value >> 8) as u8;
         let r2 = value as u8;
 
         match reg_pair {
             RegisterPair::Af => {
                 self.a = r1;
-                self.f = r2;
+                // only upper 4 bits of F are used
+                self.f = r2 & 0xF0;
             }
             RegisterPair::Bc => {
                 self.b = r1;
@@ -134,6 +142,33 @@ impl Registers {
                 self.l = r2;
             }
         }
+    }
+
+    pub fn get_flag(&self, flag: Flag) -> bool {
+        let value = match flag {
+            Flag::Zero => self.f & 0x80,
+            Flag::Subtract => self.f & 0x40,
+            Flag::HalfCarry => self.f & 0x20,
+            Flag::Carry => self.f & 0x10,
+        };
+        value != 0
+    }
+    pub fn set_flag(&mut self, flag: Flag, val: bool) {
+        if val {
+            match flag {
+                Flag::Zero => self.f |= 0x80,
+                Flag::Subtract => self.f |= 0x40,
+                Flag::HalfCarry => self.f |= 0x20,
+                Flag::Carry => self.f |= 0x10,
+            };
+        } else {
+            match flag {
+                Flag::Zero => self.f &= !0x80,
+                Flag::Subtract => self.f &= !0x40,
+                Flag::HalfCarry => self.f &= !0x20,
+                Flag::Carry => self.f &= !0x10,
+            };
+        };
     }
 }
 
@@ -153,19 +188,19 @@ mod tests {
     #[test]
     fn init_registers() {
         let registers = Registers::new();
-        assert_eq!(registers.get_16bit(RegisterPair::Af), 0x01B0)
+        assert_eq!(registers.get_16bit(&RegisterPair::Af), 0x01B0)
     }
     #[test]
     fn set_16() {
         let mut registers = Registers::new();
-        registers.set_16bit(RegisterPair::Af, 0x0A0C);
+        registers.set_16bit(&RegisterPair::Af, 0x0A0C);
         assert_eq!(registers.a, 0x0A);
         assert_eq!(registers.f, 0x0C);
     }
     #[test]
     fn set_16_then_get_16() {
         let mut registers = Registers::new();
-        registers.set_16bit(RegisterPair::Af, 0x0A0C);
-        assert_eq!(registers.get_16bit(RegisterPair::Af), 0x0A0C);
+        registers.set_16bit(&RegisterPair::Af, 0x0A0C);
+        assert_eq!(registers.get_16bit(&RegisterPair::Af), 0x0A0C);
     }
 }
