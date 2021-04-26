@@ -183,24 +183,6 @@ impl Cpu {
                 self.registers.set_flag(Flag::HalfCarry, false);
                 self.registers.set_flag(Flag::Carry, false);
             }
-            Instruction::Sub(operand) => match operand {
-                ArithmeticOperand::Register(reg) => self.registers.set(
-                    &Register::A,
-                    self.registers.get(&Register::A) - self.registers.get(reg),
-                ),
-                ArithmeticOperand::AtHl => self.registers.set(
-                    &Register::A,
-                    self.registers.get(&Register::A)
-                        - self
-                            .memory
-                            .read_byte(self.registers.get_16bit(&RegisterPair::Hl)),
-                ),
-                ArithmeticOperand::Data(d8) => {
-                    // need to read 1 byte for d8
-                    self.registers
-                        .set(&Register::A, self.registers.get(&Register::A) - d8)
-                }
-            },
             _ => panic!("Enounctered unimplemented instruction: {}", i),
         };
         self.pc + size as u16
