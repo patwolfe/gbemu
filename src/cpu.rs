@@ -36,11 +36,7 @@ impl Cpu {
     }
 
     fn execute(&mut self, i: &Instruction) -> u16 {
-        let (size, cycles) = Instruction::size_and_cycles(i);
-        match cycles {
-            Cycles::Cycles(n) => timer::sleep_for_cycles(n),
-            Cycles::ConditionalCycles(n, _m) => timer::sleep_for_cycles(n),
-        };
+        let (size, _cycles) = Instruction::size_and_cycles(i);
         match i {
             Instruction::Nop => {}
             Instruction::Stop => {}
