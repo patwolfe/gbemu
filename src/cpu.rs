@@ -3,6 +3,7 @@ mod registers;
 
 use crate::cpu::instruction::*;
 use crate::cpu::registers::*;
+use crate::gb;
 use crate::memory::Memory;
 use crate::ppu::Ppu;
 use crate::timer;
@@ -12,7 +13,7 @@ pub struct Cpu {
     registers: Registers,
     pc: u16,
     sp: u16,
-    memory: Memory,
+    pub memory: Memory,
     ppu: Ppu,
     current_instruction: (Instruction, u8),
 }
@@ -21,8 +22,8 @@ impl Cpu {
     pub fn new() -> Cpu {
         Cpu {
             registers: Registers::new(),
-            pc: 0,
-            sp: 0xFFFE,
+            pc: gb::init_pc_value,
+            sp: gb::init_sp_value,
             memory: Memory::initialize(),
             ppu: Ppu::new(),
             current_instruction: (Instruction::Nop, 0),

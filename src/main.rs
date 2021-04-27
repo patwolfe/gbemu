@@ -8,6 +8,7 @@ mod ppu;
 mod timer;
 
 use crate::cpu::Cpu;
+use crate::ppu::Ppu;
 
 fn main() {
     let mut window = Window::new(
@@ -34,10 +35,10 @@ fn main() {
     let mut buffer: Vec<u32> = vec![0; gb::total_pixels];
 
     let mut cpu = Cpu::new();
+    let mut ppu = Ppu::new();
     while window.is_open() && !window.is_key_down(Key::Escape) {
         cpu.step(&mut buffer);
-        // draw_screen(&cpu, &mut buffer);
-        // We unwrap here as we want this code to exit if it fails. Real applications may want to handle this in a different way
+        ppu.draw_frame(&mut cpu.memory, &mut buffer);
         window
             .update_with_buffer(&buffer, gb::screen_width, gb::screen_height)
             .unwrap();
