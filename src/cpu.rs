@@ -578,10 +578,235 @@ impl Cpu {
                 },
                 JumpKind::JumpHl => self.pc = self.registers.get_16bit(&RegisterPair::Hl),
             },
+            Instruction::Return(kind) => match kind {
+                ReturnKind::Return => self.pop(&Load16Target::StackPointer),
+                ReturnKind::ReturnConditional(cond) => match cond {
+                    JumpCondition::Zero => {
+                        if self.registers.get_flag(Flag::Zero) {
+                            self.pop(&Load16Target::StackPointer)
+                        }
+                    }
+                    JumpCondition::NonZero => {
+                        if !self.registers.get_flag(Flag::Zero) {
+                            self.pop(&Load16Target::StackPointer)
+                        }
+                    }
+                    JumpCondition::Carry => {
+                        if self.registers.get_flag(Flag::Carry) {
+                            self.pop(&Load16Target::StackPointer)
+                        }
+                    }
+                    JumpCondition::NonCarry => {
+                        if !self.registers.get_flag(Flag::Carry) {
+                            self.pop(&Load16Target::StackPointer)
+                        }
+                    }
+                },
+                ReturnKind::ReturnInterrupt => {
+                    self.pop(&Load16Target::StackPointer);
+                    // TODO: Enable IME here
+                }
+            },
+            Instruction::Pop(reg_pair) => self.pop(&Load16Target::Register16(*reg_pair)),
+            Instruction::Push(reg_pair) => self.push(self.registers.get_16bit(reg_pair)),
+            Instruction::DisableInterrupts => { /* TODO */ }
+            Instruction::EnableInterrupts => { /* TODO */ }
+            Instruction::Call(kind) => match kind {
+                CallKind::Call(a16) => {
+                    self.push(self.pc);
+                    self.pc = *a16;
+                }
+                CallKind::CallConditional(a16, cond) => match cond {
+                    JumpCondition::Zero => {
+                        if self.registers.get_flag(Flag::Zero) {
+                            self.push(self.pc);
+                            self.pc = *a16
+                        }
+                    }
+                    JumpCondition::NonZero => {
+                        if !self.registers.get_flag(Flag::Zero) {
+                            self.push(self.pc);
+                            self.pc = *a16
+                        }
+                    }
+                    JumpCondition::Carry => {
+                        if self.registers.get_flag(Flag::Carry) {
+                            self.push(self.pc);
+                            self.pc = *a16
+                        }
+                    }
+                    JumpCondition::NonCarry => {
+                        if !self.registers.get_flag(Flag::Carry) {
+                            self.push(self.pc);
+                            self.pc = *a16
+                        }
+                    }
+                },
+            },
+            Instruction::Restart(u8) => {}
+            Instruction::Instruction16(in16) => 
             _ => panic!("Enounctered unimplemented instruction: {}", i),
         };
         self.pc + size as u16
     }
+
+    fn pop(&mut self, target: &Load16Target) {
+        let low_byte = self.memory.read_byte(self.sp);
+        let high_byte = self.memory.read_byte(self.sp + 1);
+        self.sp += 2;
+        let val = low_byte as u16 | ((high_byte as u16) << 4);
+        if let Load16Target::StackPointer = target {
+            self.pc = val;
+        } else if let Load16Target::Register16(reg_pair) = target {
+            self.registers.set_16bit(reg_pair, val);
+        } else {
+            panic!("Bad pop target: {}", target);
+        }
+    }
+    fn push(&mut self, val: u16) {
+        let low_byte = val & 0xFF;
+        let high_byte = (val >> 4) & 0xFF;
+        self.memory.write_byte(self.sp, high_byte as u8);
+        self.memory.write_byte(self.sp - 1, low_byte as u8);
+        self.sp -= 2;
+    }
+
+
+
+    fn execute_instruction_16(&mut self, instruction: &Instruction16) {
+        match instruction {
+            Instruction16::RotateLeftCarry(operand) => {
+                let bit;
+                let mut value;
+                match operand {
+                    ArithmeticOperand::Register(reg) => {
+                        value = self.registers.get(reg);
+                        bit = ((value & 0x80) >> 7) & 0x01;
+                        value = ((value << 1) & 0xFE) | bit;
+                        self.registers.set(reg, value);        
+                    }
+                    ArithmeticOperand::AtHl => {
+                        let addr = self.registers.get_16bit(&RegisterPair::Hl);
+                        value = self.memory.read_byte(addr);
+                        bit = ((value & 0x80) >> 7) & 0x01;
+                        value = ((value << 1) & 0xFE) | bit;
+                        self.memory.write_byte(addr, value);        
+                    }
+                    _ => panic!("Malformed rotateLeft instruction: {}", instruction);
+                }
+                self.registers.set_flag(Flag::Zero, value == 0);
+                self.registers.set_flag(Flag::Subtract, false);
+                self.registers.set_flag(Flag::HalfCarry, false);
+                self.registers.set_flag(Flag::Carry, bit == 1);
+            }
+            Instruction16::RotateRightCarry(operand) => {
+                let bit;
+                let mut value;
+                match operand {
+                    ArithmeticOperand::Register(reg) => {
+                        value = self.registers.get(reg);
+                        bit = value & 0x01;
+                        value = ((value >> 1) & 0xFE) | bit << 7;
+                        self.registers.set(reg, value);        
+                    }
+                    ArithmeticOperand::AtHl => {
+                        let addr = self.registers.get_16bit(&RegisterPair::Hl);
+                        value = self.memory.read_byte(addr);
+                        bit = value & 0x01;
+                        value = ((value >> 1) & 0xFE) | bit << 7;
+                        self.memory.write_byte(addr, value);        
+                    }
+                    _ => panic!("Malformed rotateLeft instruction: {}", instruction);
+                }
+                self.registers.set_flag(Flag::Zero, value == 0);
+                self.registers.set_flag(Flag::Subtract, false);
+                self.registers.set_flag(Flag::HalfCarry, false);
+                self.registers.set_flag(Flag::Carry, bit == 1);
+            }
+            Instruction16::RotateLeft(operand) => {
+                let bit;
+                let mut value;
+                let carry_bit = if self.registers.get_flag(Flag::Carry) {
+                    1
+                } else {
+                    0
+                };
+                match operand {
+                    ArithmeticOperand::Register(reg) => {
+                        value = self.registers.get(reg);
+                        bit = ((value & 0x80) >> 7) & 0x01;
+                        value = ((value << 1) & 0xFE) | carry_bit;
+                        self.registers.set(reg, value);        
+                    }
+                    ArithmeticOperand::AtHl => {
+                        let addr = self.registers.get_16bit(&RegisterPair::Hl);
+                        value = self.memory.read_byte(addr);
+                        bit = ((value & 0x80) >> 7) & 0x01;
+                        value = ((value << 1) & 0xFE) | carry_bit;
+                        self.memory.write_byte(addr, value);        
+                    }
+                    _ => panic!("Malformed rotateLeft instruction: {}", instruction);
+                }
+                self.registers.set_flag(Flag::Zero, value == 0);
+                self.registers.set_flag(Flag::Subtract, false);
+                self.registers.set_flag(Flag::HalfCarry, false);
+                self.registers.set_flag(Flag::Carry, bit == 1);
+            }
+            Instruction16::RotateRight(operand) => {
+                let bit;
+                let mut value;
+                let carry_bit = if self.registers.get_flag(Flag::Carry) {
+                    1
+                } else {
+                    0
+                };
+                match operand {
+                    ArithmeticOperand::Register(reg) => {
+                        value = self.registers.get(reg);
+                        bit = value & 0x01;
+                        value = ((value >> 1) & 0xFE) | carry_bit << 7;
+                        self.registers.set(reg, value);        
+                    }
+                    ArithmeticOperand::AtHl => {
+                        let addr = self.registers.get_16bit(&RegisterPair::Hl);
+                        value = self.memory.read_byte(addr);
+                        bit = value & 0x01;
+                        value = ((value >> 1) & 0xFE) | carry_bit << 7;
+                        self.memory.write_byte(addr, value);        
+                    }
+                    _ => panic!("Malformed rotateLeft instruction: {}", instruction);
+                }
+                self.registers.set_flag(Flag::Zero, value == 0);
+                self.registers.set_flag(Flag::Subtract, false);
+                self.registers.set_flag(Flag::HalfCarry, false);
+                self.registers.set_flag(Flag::Carry, bit == 1);
+            }
+        }
+    }
+
+    // fn rotate_left(&mut self, operand: &ArithmeticOperand) {
+    //     let mut val;
+    //     if let ArithmeticOperand::Register(reg) = operand{
+    //         val = self.registers.get(&Register::A);
+    //     } else if let ArithmeticOperand::AtHl = operand {
+    //         let addr = self.registers.get_16bit(&RegisterPair::Hl);
+    //         val = self.memory.read_byte(addr);
+    //     } else {panic!("Bad rorate operand: {}", operand)}
+    //     let bit = ((val & 0x80) >> 7) & 0x01;
+    //     let carry_bit = if self.registers.get_flag(Flag::Carry) {
+    //         1
+    //     } else {
+    //         0
+    //     };
+    //     val = ((val << 1) & 0xFE) | carry_bit;
+    //     if let ArithmeticOperand::Register(reg) = operand{
+    //         self.registers.set(&Register::A, val);
+    //     } else if let ArithmeticOperand::AtHl = operand {
+    //         let addr = self.registers.get_16bit(&RegisterPair::Hl);
+    //         val = self.memory.read_byte(addr);
+    //     }
+    //     self.registers.set(&Register::A, a);
+    // }
 }
 
 #[cfg(test)]

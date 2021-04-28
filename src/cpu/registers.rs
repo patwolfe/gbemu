@@ -46,7 +46,7 @@ impl fmt::Display for Register {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Copy, Clone)]
 pub enum RegisterPair {
     Af,
     Bc,
