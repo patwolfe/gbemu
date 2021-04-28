@@ -37,7 +37,7 @@ fn main() {
     let mut cpu = Cpu::new();
     let mut ppu = Ppu::new();
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        cpu.step(&mut buffer);
+        cpu.step();
         ppu.draw_frame(&mut cpu.memory, &mut buffer);
         window
             .update_with_buffer(&buffer, gb::screen_width, gb::screen_height)

@@ -30,7 +30,7 @@ impl Cpu {
         }
     }
 
-    pub fn step(&mut self, _framebuffer: &mut Vec<u32>) {
+    pub fn step(&mut self) {
         let instruction = Instruction::from_bytes(&self.memory, self.pc);
         println!("{}", instruction);
         self.pc = self.execute(&instruction);
@@ -40,8 +40,15 @@ impl Cpu {
         let (size, _cycles) = Instruction::size_and_cycles(i);
         match i {
             Instruction::Nop => {}
-            Instruction::Stop => {}
-            Instruction::Halt => {}
+            Instruction::Stop => {
+                println!("Stopping program with instruction {}", i);
+            }
+            Instruction::Halt => {
+                println!("Halting program with instruction {}", i);
+            }
+            Instruction::SetCarryFlag => {
+                self.registers.set_flag(Flag::Carry, true);
+            }
             Instruction::Load16(operand1, operand2) => {
                 match (operand1, operand2) {
                     (Load16Target::Register16(reg), Load16Source::Data(d16)) => {
@@ -76,24 +83,32 @@ impl Cpu {
                 _ => panic!("Enounctered unimplemented load8 instruction: {}", i),
             },
             Instruction::Add(operand) => {
-                let result = 0;
+                let result;
+                let half_carry;
                 match operand {
                     ArithmeticOperand::Register(reg) => {
-                        let result: u16 =
+                        result =
                             (self.registers.get(&Register::A) + self.registers.get(reg)) as u16;
+                        half_carry = (self.registers.get(&Register::A) & 0xF)
+                            + (self.registers.get(reg) & 0xF)
+                            > 0xF;
                         self.registers.set(&Register::A, result as u8);
                     }
                     ArithmeticOperand::AtHl => {
-                        let result: u16 = (self.registers.get(&Register::A)
-                            + self
-                                .memory
-                                .read_byte(self.registers.get_16bit(&RegisterPair::Hl)))
+                        let at_hl = self
+                            .memory
+                            .read_byte(self.registers.get_16bit(&RegisterPair::Hl))
                             as u16;
+                        result = self.registers.get(&Register::A) as u16 + at_hl;
+                        half_carry =
+                            (self.registers.get(&Register::A) & 0xF) as u16 + (at_hl & 0xF) > 0xF;
+                        self.registers.set(&Register::A, result as u8);
                         self.registers.set(&Register::A, result as u8);
                     }
                     ArithmeticOperand::Data(d8) => {
                         // need to read 1 byte for d8
-                        let result: u16 = (self.registers.get(&Register::A) + d8) as u16;
+                        result = (self.registers.get(&Register::A) + d8) as u16;
+                        half_carry = (self.registers.get(&Register::A) & 0xF) + (d8 & 0xF) > 0xF;
                         self.registers.set(&Register::A, result as u8);
                     }
                 };
@@ -101,43 +116,149 @@ impl Cpu {
                 self.registers.set_flag(Flag::Zero, result == 0);
                 self.registers.set_flag(Flag::Carry, result > 0xFF);
                 self.registers.set_flag(Flag::Subtract, false);
+                self.registers.set_flag(Flag::HalfCarry, half_carry);
             }
             Instruction::Sub(operand) => {
-                let result = 0;
+                let result;
+                let half_carry;
+                let carry;
                 match operand {
                     ArithmeticOperand::Register(reg) => {
-                        let result: u16 =
+                        result =
                             (self.registers.get(&Register::A) - self.registers.get(reg)) as u16;
+                        half_carry = (self.registers.get(&Register::A) & 0xF)
+                            - (self.registers.get(reg) & 0xF)
+                            >= 0x10;
+                        carry = self.registers.get(reg) > (self.registers.get(&Register::A));
                         self.registers.set(&Register::A, result as u8);
                     }
                     ArithmeticOperand::AtHl => {
-                        let result: u16 = (self.registers.get(&Register::A)
-                            - self
-                                .memory
-                                .read_byte(self.registers.get_16bit(&RegisterPair::Hl)))
-                            as u16;
+                        let at_hl = self
+                            .memory
+                            .read_byte(self.registers.get_16bit(&RegisterPair::Hl));
+                        result = (self.registers.get(&Register::A) - at_hl) as u16;
+                        half_carry =
+                            (self.registers.get(&Register::A) & 0xF) - (at_hl & 0xF) >= 0x10;
+                        carry = at_hl > self.registers.get(&Register::A);
                         self.registers.set(&Register::A, result as u8);
                     }
                     ArithmeticOperand::Data(d8) => {
                         // need to read 1 byte for d8
-                        let result: u16 = (self.registers.get(&Register::A) - d8) as u16;
+                        result = (self.registers.get(&Register::A) - *d8) as u16;
+                        half_carry = (self.registers.get(&Register::A) & 0xF) - (*d8 & 0xF) >= 0x10;
+                        carry = *d8 > self.registers.get(&Register::A);
                         self.registers.set(&Register::A, result as u8);
                     }
                 };
                 // Set flags based on result
                 self.registers.set_flag(Flag::Zero, result == 0);
+                self.registers.set_flag(Flag::HalfCarry, half_carry);
+                self.registers.set_flag(Flag::Carry, carry);
+                self.registers.set_flag(Flag::Subtract, true);
+            }
+            Instruction::AddCarry(operand) => {
+                let result: u16;
+                let half_carry;
+                let carry_bit = if let true = self.registers.get_flag(Flag::Carry) {
+                    1
+                } else {
+                    0
+                };
+                match operand {
+                    ArithmeticOperand::Register(reg) => {
+                        result = (self.registers.get(&Register::A) + self.registers.get(reg))
+                            as u16
+                            + carry_bit;
+                        half_carry = (self.registers.get(&Register::A) & 0xF)
+                            + (self.registers.get(reg) & 0xF)
+                            > 0xF;
+                        self.registers.set(&Register::A, result as u8);
+                    }
+                    ArithmeticOperand::AtHl => {
+                        let at_hl = self
+                            .memory
+                            .read_byte(self.registers.get_16bit(&RegisterPair::Hl))
+                            as u16;
+                        result = self.registers.get(&Register::A) as u16 + at_hl + carry_bit;
+                        half_carry =
+                            (self.registers.get(&Register::A) & 0xF) as u16 + (at_hl & 0xF) > 0xF;
+                        self.registers.set(&Register::A, result as u8);
+                        self.registers.set(&Register::A, result as u8);
+                    }
+                    ArithmeticOperand::Data(d8) => {
+                        // need to read 1 byte for d8
+                        result = (self.registers.get(&Register::A) + d8) as u16 + carry_bit;
+                        half_carry = (self.registers.get(&Register::A) & 0xF) + (d8 & 0xF) > 0xF;
+                        self.registers.set(&Register::A, result as u8);
+                    }
+                };
+                // Set flags based on result
+                self.registers.set_flag(Flag::Zero, result == 0);
+                self.registers.set_flag(Flag::Carry, result > 0xFF);
+                self.registers.set_flag(Flag::Subtract, false);
+                self.registers.set_flag(Flag::HalfCarry, half_carry);
+            }
+            Instruction::SubCarry(operand) => {
+                let result;
+                let half_carry;
+                let carry;
+                let carry_bit = if let true = self.registers.get_flag(Flag::Carry) {
+                    1
+                } else {
+                    0
+                };
+                match operand {
+                    ArithmeticOperand::Register(reg) => {
+                        result = (self.registers.get(&Register::A) - self.registers.get(reg))
+                            as u16
+                            - carry_bit;
+                        half_carry = (self.registers.get(&Register::A) & 0xF)
+                            - (self.registers.get(reg) & 0xF)
+                            - carry_bit as u8
+                            >= 0x10;
+                        carry = self.registers.get(reg) as u16 + carry_bit
+                            > (self.registers.get(&Register::A)) as u16;
+                        self.registers.set(&Register::A, result as u8);
+                    }
+                    ArithmeticOperand::AtHl => {
+                        let at_hl = self
+                            .memory
+                            .read_byte(self.registers.get_16bit(&RegisterPair::Hl));
+                        result = (self.registers.get(&Register::A) - at_hl) as u16 - carry_bit;
+                        half_carry = (self.registers.get(&Register::A) & 0xF)
+                            - (at_hl & 0xF)
+                            - carry_bit as u8
+                            >= 0x10;
+                        carry = at_hl as u16 + carry_bit > self.registers.get(&Register::A) as u16;
+                        self.registers.set(&Register::A, result as u8);
+                    }
+                    ArithmeticOperand::Data(d8) => {
+                        // need to read 1 byte for d8
+                        result = (self.registers.get(&Register::A) - *d8) as u16 - carry_bit;
+                        half_carry = (self.registers.get(&Register::A) & 0xF)
+                            - (*d8 & 0xF)
+                            - carry_bit as u8
+                            >= 0x10;
+                        carry = *d8 as u16 + carry_bit > self.registers.get(&Register::A) as u16;
+                        self.registers.set(&Register::A, result as u8);
+                    }
+                };
+                // Set flags based on result
+                self.registers.set_flag(Flag::Zero, result == 0);
+                self.registers.set_flag(Flag::HalfCarry, half_carry);
+                self.registers.set_flag(Flag::Carry, carry);
                 self.registers.set_flag(Flag::Subtract, true);
             }
             Instruction::And(operand) => {
-                let result = 0;
+                let result;
                 match operand {
                     ArithmeticOperand::Register(reg) => {
-                        let result: u16 =
+                        result =
                             (self.registers.get(&Register::A) & self.registers.get(reg)) as u16;
                         self.registers.set(&Register::A, result as u8);
                     }
                     ArithmeticOperand::AtHl => {
-                        let result: u16 = (self.registers.get(&Register::A)
+                        result = (self.registers.get(&Register::A)
                             & self
                                 .memory
                                 .read_byte(self.registers.get_16bit(&RegisterPair::Hl)))
@@ -146,7 +267,35 @@ impl Cpu {
                     }
                     ArithmeticOperand::Data(d8) => {
                         // need to read 1 byte for d8
-                        let result: u16 = (self.registers.get(&Register::A) & d8) as u16;
+                        result = (self.registers.get(&Register::A) & d8) as u16;
+                        self.registers.set(&Register::A, result as u8);
+                    }
+                };
+                // Set flags based on result
+                self.registers.set_flag(Flag::Zero, result == 0);
+                self.registers.set_flag(Flag::Subtract, false);
+                self.registers.set_flag(Flag::HalfCarry, true);
+                self.registers.set_flag(Flag::Carry, false);
+            }
+            Instruction::Or(operand) => {
+                let result;
+                match operand {
+                    ArithmeticOperand::Register(reg) => {
+                        result =
+                            (self.registers.get(&Register::A) | self.registers.get(reg)) as u16;
+                        self.registers.set(&Register::A, result as u8);
+                    }
+                    ArithmeticOperand::AtHl => {
+                        result = (self.registers.get(&Register::A)
+                            | self
+                                .memory
+                                .read_byte(self.registers.get_16bit(&RegisterPair::Hl)))
+                            as u16;
+                        self.registers.set(&Register::A, result as u8);
+                    }
+                    ArithmeticOperand::Data(d8) => {
+                        // need to read 1 byte for d8
+                        result = (self.registers.get(&Register::A) | d8) as u16;
                         self.registers.set(&Register::A, result as u8);
                     }
                 };
@@ -156,17 +305,17 @@ impl Cpu {
                 self.registers.set_flag(Flag::HalfCarry, false);
                 self.registers.set_flag(Flag::Carry, false);
             }
-            Instruction::Or(operand) => {
-                let result = 0;
+            Instruction::Xor(operand) => {
+                let result;
                 match operand {
                     ArithmeticOperand::Register(reg) => {
-                        let result: u16 =
-                            (self.registers.get(&Register::A) | self.registers.get(reg)) as u16;
+                        result =
+                            (self.registers.get(&Register::A) ^ self.registers.get(reg)) as u16;
                         self.registers.set(&Register::A, result as u8);
                     }
                     ArithmeticOperand::AtHl => {
-                        let result: u16 = (self.registers.get(&Register::A)
-                            | self
+                        result = (self.registers.get(&Register::A)
+                            ^ self
                                 .memory
                                 .read_byte(self.registers.get_16bit(&RegisterPair::Hl)))
                             as u16;
@@ -174,7 +323,7 @@ impl Cpu {
                     }
                     ArithmeticOperand::Data(d8) => {
                         // need to read 1 byte for d8
-                        let result: u16 = (self.registers.get(&Register::A) | d8) as u16;
+                        result = (self.registers.get(&Register::A) ^ d8) as u16;
                         self.registers.set(&Register::A, result as u8);
                     }
                 };
@@ -183,6 +332,164 @@ impl Cpu {
                 self.registers.set_flag(Flag::Subtract, false);
                 self.registers.set_flag(Flag::HalfCarry, false);
                 self.registers.set_flag(Flag::Carry, false);
+            }
+            Instruction::Compare(operand) => {
+                let result;
+                let half_carry;
+                let carry;
+                match operand {
+                    ArithmeticOperand::Register(reg) => {
+                        result =
+                            (self.registers.get(&Register::A) - self.registers.get(reg)) as u16;
+                        half_carry = (self.registers.get(&Register::A) & 0xF)
+                            - (self.registers.get(reg) & 0xF)
+                            >= 0x10;
+                        carry = self.registers.get(reg) > (self.registers.get(&Register::A));
+                    }
+                    ArithmeticOperand::AtHl => {
+                        let at_hl = self
+                            .memory
+                            .read_byte(self.registers.get_16bit(&RegisterPair::Hl));
+                        result = (self.registers.get(&Register::A) - at_hl) as u16;
+                        half_carry =
+                            (self.registers.get(&Register::A) & 0xF) - (at_hl & 0xF) >= 0x10;
+                        carry = at_hl > self.registers.get(&Register::A);
+                    }
+                    ArithmeticOperand::Data(d8) => {
+                        // need to read 1 byte for d8
+                        result = (self.registers.get(&Register::A) - *d8) as u16;
+                        half_carry = (self.registers.get(&Register::A) & 0xF) - (*d8 & 0xF) >= 0x10;
+                        carry = *d8 > self.registers.get(&Register::A);
+                    }
+                };
+                // Set flags based on result
+                self.registers.set_flag(Flag::Zero, result == 0);
+                self.registers.set_flag(Flag::HalfCarry, half_carry);
+                self.registers.set_flag(Flag::Carry, carry);
+                self.registers.set_flag(Flag::Subtract, true);
+            }
+            Instruction::Increment(operand) => {
+                let result;
+                let half_carry;
+                match operand {
+                    ArithmeticOperand::Register(reg) => {
+                        result = self.registers.get(&reg) + 1;
+                        half_carry = (self.registers.get(&reg) ^ 1 ^ result) & 0x10 == 0x10;
+                        self.registers.set(&reg, result);
+                    }
+                    ArithmeticOperand::AtHl => {
+                        // this takes 1 cycle
+                        let hl_val = self
+                            .memory
+                            .read_byte(self.registers.get_16bit(&RegisterPair::Hl));
+                        // 1 cycle
+                        result = hl_val + 1;
+                        half_carry = (hl_val ^ 1 ^ result) & 0x10 == 0x10;
+                        // 1 cycle
+                        self.memory
+                            .write_byte(self.registers.get_16bit(&RegisterPair::Hl), result)
+                    }
+                    _ => panic!("Enounctered malformed increment instruction: {}", i),
+                };
+                // Set flags based on result
+                self.registers.set_flag(Flag::Zero, result == 0);
+                self.registers.set_flag(Flag::Subtract, false);
+                self.registers.set_flag(Flag::HalfCarry, half_carry);
+            }
+            Instruction::Decrement(operand) => {
+                let result;
+                let half_carry;
+                match operand {
+                    ArithmeticOperand::Register(reg) => {
+                        result = self.registers.get(&reg) + 1;
+                        half_carry = (self.registers.get(&reg) ^ 1 ^ result) & 0x10 == 0x10;
+                        self.registers.set(&reg, result);
+                    }
+                    ArithmeticOperand::AtHl => {
+                        // this takes 1 cycle
+                        let hl_val = self
+                            .memory
+                            .read_byte(self.registers.get_16bit(&RegisterPair::Hl));
+                        // 1 cycle
+                        result = hl_val + 1;
+                        half_carry = (hl_val ^ 1 ^ result) & 0x10 == 0x10;
+                        // 1 cycle
+                        self.memory
+                            .write_byte(self.registers.get_16bit(&RegisterPair::Hl), result)
+                    }
+                    _ => panic!("Enounctered malformed decrement instruction: {}", i),
+                };
+                // Set flags based on result
+                self.registers.set_flag(Flag::Zero, result == 0);
+                self.registers.set_flag(Flag::Subtract, false);
+                self.registers.set_flag(Flag::HalfCarry, half_carry);
+            }
+            Instruction::IncrementPtr(operand) => {
+                let result;
+                match operand {
+                    PtrArithOperand::Register16(reg) => {
+                        result = self.registers.get_16bit(&reg) + 1;
+                        self.registers.set_16bit(&reg, result);
+                    }
+                    PtrArithOperand::StackPointer => self.sp += 1,
+                    _ => panic!("Enounctered malformed 16bit increment instruction: {}", i),
+                };
+            }
+            Instruction::DecrementPtr(operand) => {
+                let result;
+                match operand {
+                    PtrArithOperand::Register16(reg) => {
+                        result = self.registers.get_16bit(&reg) - 1;
+                        self.registers.set_16bit(&reg, result);
+                    }
+                    PtrArithOperand::StackPointer => self.sp -= 1,
+                    _ => panic!("Enounctered malformed 16bit decrement instruction: {}", i),
+                };
+            }
+            Instruction::Rotate(kind) => {
+                let bit;
+                match kind {
+                    RotateKind::LeftCarry => {
+                        let mut a = self.registers.get(&Register::A);
+                        bit = ((a & 0x80) >> 7) & 0x01;
+                        a = ((a << 1) & 0xFE) | bit;
+                        self.registers.set(&Register::A, a);
+                    }
+                    RotateKind::Left => {
+                        let mut a = self.registers.get(&Register::A);
+                        bit = ((a & 0x80) >> 7) & 0x01;
+                        let carry_bit = if self.registers.get_flag(Flag::Carry) {
+                            1
+                        } else {
+                            0
+                        };
+                        a = ((a << 1) & 0xFE) | carry_bit;
+                        self.registers.set(&Register::A, a);
+                    }
+                    RotateKind::RightCarry => {
+                        let mut a = self.registers.get(&Register::A);
+                        bit = a & 0x01;
+                        a = ((a >> 1) & 0x8F) | (bit << 7);
+                        self.registers.set(&Register::A, a);
+                    }
+                    RotateKind::Right => {
+                        let mut a = self.registers.get(&Register::A);
+                        bit = a & 0x01;
+                        let carry_bit = if self.registers.get_flag(Flag::Carry) {
+                            1
+                        } else {
+                            0
+                        };
+                        a = ((a >> 1) & 0x8F) | (carry_bit << 7);
+                        self.registers.set(&Register::A, a);
+                    }
+                    _ => panic!("Encountered malformed rotate instruction: {}", i),
+                }
+                // Set flags based on result
+                self.registers.set_flag(Flag::Zero, false);
+                self.registers.set_flag(Flag::Subtract, false);
+                self.registers.set_flag(Flag::HalfCarry, false);
+                self.registers.set_flag(Flag::Carry, bit == 1);
             }
             _ => panic!("Enounctered unimplemented instruction: {}", i),
         };
