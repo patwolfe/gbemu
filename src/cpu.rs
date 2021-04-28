@@ -531,7 +531,52 @@ impl Cpu {
             }
             Instruction::Jump(kind) => match kind {
                 JumpKind::JumpRelative(a8) => self.pc += *a8 as u16,
-                JumpKind::JumpRelativeConditional()
+                JumpKind::JumpRelativeConditional(cond, a8) => match cond {
+                    JumpCondition::Zero => {
+                        if self.registers.get_flag(Flag::Zero) {
+                            self.sp += *a8 as u16
+                        }
+                    }
+                    JumpCondition::NonZero => {
+                        if !self.registers.get_flag(Flag::Zero) {
+                            self.sp += *a8 as u16
+                        }
+                    }
+                    JumpCondition::Carry => {
+                        if self.registers.get_flag(Flag::Carry) {
+                            self.sp += *a8 as u16
+                        }
+                    }
+                    JumpCondition::NonCarry => {
+                        if !self.registers.get_flag(Flag::Carry) {
+                            self.sp += *a8 as u16
+                        }
+                    }
+                },
+                JumpKind::Jump(a16) => self.pc = *a16,
+                JumpKind::JumpConditional(cond, a16) => match cond {
+                    JumpCondition::Zero => {
+                        if self.registers.get_flag(Flag::Zero) {
+                            self.pc = *a16
+                        }
+                    }
+                    JumpCondition::NonZero => {
+                        if !self.registers.get_flag(Flag::Zero) {
+                            self.pc = *a16
+                        }
+                    }
+                    JumpCondition::Carry => {
+                        if self.registers.get_flag(Flag::Carry) {
+                            self.pc = *a16
+                        }
+                    }
+                    JumpCondition::NonCarry => {
+                        if !self.registers.get_flag(Flag::Carry) {
+                            self.pc = *a16
+                        }
+                    }
+                },
+                JumpKind::JumpHl => self.pc = self.registers.get_16bit(&RegisterPair::Hl),
             },
             _ => panic!("Enounctered unimplemented instruction: {}", i),
         };
