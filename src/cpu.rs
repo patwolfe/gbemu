@@ -444,51 +444,20 @@ impl Cpu {
                     _ => panic!("Enounctered malformed 16bit decrement instruction: {}", i),
                 };
             }
-            Instruction::Rotate(kind) => {
-                let bit;
-                match kind {
-                    RotateKind::LeftCarry => {
-                        let mut a = self.registers.get(&Register::A);
-                        bit = ((a & 0x80) >> 7) & 0x01;
-                        a = ((a << 1) & 0xFE) | bit;
-                        self.registers.set(&Register::A, a);
-                    }
-                    RotateKind::Left => {
-                        let mut a = self.registers.get(&Register::A);
-                        bit = ((a & 0x80) >> 7) & 0x01;
-                        let carry_bit = if self.registers.get_flag(Flag::Carry) {
-                            1
-                        } else {
-                            0
-                        };
-                        a = ((a << 1) & 0xFE) | carry_bit;
-                        self.registers.set(&Register::A, a);
-                    }
-                    RotateKind::RightCarry => {
-                        let mut a = self.registers.get(&Register::A);
-                        bit = a & 0x01;
-                        a = ((a >> 1) & 0x8F) | (bit << 7);
-                        self.registers.set(&Register::A, a);
-                    }
-                    RotateKind::Right => {
-                        let mut a = self.registers.get(&Register::A);
-                        bit = a & 0x01;
-                        let carry_bit = if self.registers.get_flag(Flag::Carry) {
-                            1
-                        } else {
-                            0
-                        };
-                        a = ((a >> 1) & 0x8F) | (carry_bit << 7);
-                        self.registers.set(&Register::A, a);
-                    }
-                    _ => panic!("Encountered malformed rotate instruction: {}", i),
+            Instruction::Rotate(kind) => match kind {
+                RotateKind::LeftCarry => {
+                    self.rotate(true, true, &ArithmeticOperand::Register(Register::A))
                 }
-                // Set flags based on result
-                self.registers.set_flag(Flag::Zero, false);
-                self.registers.set_flag(Flag::Subtract, false);
-                self.registers.set_flag(Flag::HalfCarry, false);
-                self.registers.set_flag(Flag::Carry, bit == 1);
-            }
+                RotateKind::Left => {
+                    self.rotate(true, false, &ArithmeticOperand::Register(Register::A))
+                }
+                RotateKind::RightCarry => {
+                    self.rotate(false, true, &ArithmeticOperand::Register(Register::A))
+                }
+                RotateKind::Right => {
+                    self.rotate(false, false, &ArithmeticOperand::Register(Register::A))
+                }
+            },
             Instruction::DecimalAdjust => {
                 // doc here -> https://ehaskins.com/2018-01-30%20Z80%20DAA/
                 let a = self.registers.get(&Register::A);
@@ -644,7 +613,7 @@ impl Cpu {
                 },
             },
             Instruction::Restart(u8) => {}
-            Instruction::Instruction16(in16) => 
+            Instruction::Instruction16(in16) => self.execute_instruction_16(in16),
             _ => panic!("Enounctered unimplemented instruction: {}", i),
         };
         self.pc + size as u16
@@ -671,117 +640,58 @@ impl Cpu {
         self.sp -= 2;
     }
 
-
-
     fn execute_instruction_16(&mut self, instruction: &Instruction16) {
         match instruction {
-            Instruction16::RotateLeftCarry(operand) => {
-                let bit;
-                let mut value;
-                match operand {
-                    ArithmeticOperand::Register(reg) => {
-                        value = self.registers.get(reg);
-                        bit = ((value & 0x80) >> 7) & 0x01;
-                        value = ((value << 1) & 0xFE) | bit;
-                        self.registers.set(reg, value);        
-                    }
-                    ArithmeticOperand::AtHl => {
-                        let addr = self.registers.get_16bit(&RegisterPair::Hl);
-                        value = self.memory.read_byte(addr);
-                        bit = ((value & 0x80) >> 7) & 0x01;
-                        value = ((value << 1) & 0xFE) | bit;
-                        self.memory.write_byte(addr, value);        
-                    }
-                    _ => panic!("Malformed rotateLeft instruction: {}", instruction);
-                }
-                self.registers.set_flag(Flag::Zero, value == 0);
-                self.registers.set_flag(Flag::Subtract, false);
-                self.registers.set_flag(Flag::HalfCarry, false);
-                self.registers.set_flag(Flag::Carry, bit == 1);
-            }
-            Instruction16::RotateRightCarry(operand) => {
-                let bit;
-                let mut value;
-                match operand {
-                    ArithmeticOperand::Register(reg) => {
-                        value = self.registers.get(reg);
-                        bit = value & 0x01;
-                        value = ((value >> 1) & 0xFE) | bit << 7;
-                        self.registers.set(reg, value);        
-                    }
-                    ArithmeticOperand::AtHl => {
-                        let addr = self.registers.get_16bit(&RegisterPair::Hl);
-                        value = self.memory.read_byte(addr);
-                        bit = value & 0x01;
-                        value = ((value >> 1) & 0xFE) | bit << 7;
-                        self.memory.write_byte(addr, value);        
-                    }
-                    _ => panic!("Malformed rotateLeft instruction: {}", instruction);
-                }
-                self.registers.set_flag(Flag::Zero, value == 0);
-                self.registers.set_flag(Flag::Subtract, false);
-                self.registers.set_flag(Flag::HalfCarry, false);
-                self.registers.set_flag(Flag::Carry, bit == 1);
-            }
-            Instruction16::RotateLeft(operand) => {
-                let bit;
-                let mut value;
-                let carry_bit = if self.registers.get_flag(Flag::Carry) {
-                    1
-                } else {
-                    0
-                };
-                match operand {
-                    ArithmeticOperand::Register(reg) => {
-                        value = self.registers.get(reg);
-                        bit = ((value & 0x80) >> 7) & 0x01;
-                        value = ((value << 1) & 0xFE) | carry_bit;
-                        self.registers.set(reg, value);        
-                    }
-                    ArithmeticOperand::AtHl => {
-                        let addr = self.registers.get_16bit(&RegisterPair::Hl);
-                        value = self.memory.read_byte(addr);
-                        bit = ((value & 0x80) >> 7) & 0x01;
-                        value = ((value << 1) & 0xFE) | carry_bit;
-                        self.memory.write_byte(addr, value);        
-                    }
-                    _ => panic!("Malformed rotateLeft instruction: {}", instruction);
-                }
-                self.registers.set_flag(Flag::Zero, value == 0);
-                self.registers.set_flag(Flag::Subtract, false);
-                self.registers.set_flag(Flag::HalfCarry, false);
-                self.registers.set_flag(Flag::Carry, bit == 1);
-            }
-            Instruction16::RotateRight(operand) => {
-                let bit;
-                let mut value;
-                let carry_bit = if self.registers.get_flag(Flag::Carry) {
-                    1
-                } else {
-                    0
-                };
-                match operand {
-                    ArithmeticOperand::Register(reg) => {
-                        value = self.registers.get(reg);
-                        bit = value & 0x01;
-                        value = ((value >> 1) & 0xFE) | carry_bit << 7;
-                        self.registers.set(reg, value);        
-                    }
-                    ArithmeticOperand::AtHl => {
-                        let addr = self.registers.get_16bit(&RegisterPair::Hl);
-                        value = self.memory.read_byte(addr);
-                        bit = value & 0x01;
-                        value = ((value >> 1) & 0xFE) | carry_bit << 7;
-                        self.memory.write_byte(addr, value);        
-                    }
-                    _ => panic!("Malformed rotateLeft instruction: {}", instruction);
-                }
-                self.registers.set_flag(Flag::Zero, value == 0);
-                self.registers.set_flag(Flag::Subtract, false);
-                self.registers.set_flag(Flag::HalfCarry, false);
-                self.registers.set_flag(Flag::Carry, bit == 1);
-            }
+            Instruction16::RotateLeftCarry(operand) => self.rotate(true, true, operand),
+            Instruction16::RotateRightCarry(operand) => self.rotate(false, true, operand),
+            Instruction16::RotateLeft(operand) => self.rotate(true, false, operand),
+            Instruction16::RotateRight(operand) => self.rotate(false, false, operand),
+            _ => panic!("Bad instruciton16: {}", instruction),
         }
+    }
+
+    fn rotate(&mut self, left: bool, carry: bool, operand: &ArithmeticOperand) {
+        let mut value = if let ArithmeticOperand::AtHl = operand {
+            let addr = self.registers.get_16bit(&RegisterPair::Hl);
+            self.memory.read_byte(addr)
+        } else if let ArithmeticOperand::Register(reg) = operand {
+            self.registers.get(reg)
+        } else {
+            panic!("Malformed rorate got to helper function")
+        };
+        let shifted_bit = if left {
+            (value >> 7) & 0x1
+        } else {
+            value & 0x1
+        };
+
+        if left {
+            value >>= 7;
+        } else {
+            value <<= 7
+        };
+
+        let bit = if carry {
+            self.registers.get_flag(Flag::Carry) as u8
+        } else {
+            shifted_bit
+        };
+
+        value &= if left { bit << 7 } else { bit };
+
+        if let ArithmeticOperand::AtHl = operand {
+            let addr = self.registers.get_16bit(&RegisterPair::Hl);
+            self.memory.write_byte(addr, value)
+        } else if let ArithmeticOperand::Register(reg) = operand {
+            self.registers.set(reg, value);
+        } else {
+            panic!("Malformed rorate got to helper function")
+        };
+
+        self.registers.set_flag(Flag::Zero, value == 0);
+        self.registers.set_flag(Flag::Subtract, false);
+        self.registers.set_flag(Flag::HalfCarry, false);
+        self.registers.set_flag(Flag::Carry, shifted_bit == 1);
     }
 
     // fn rotate_left(&mut self, operand: &ArithmeticOperand) {
