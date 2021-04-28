@@ -193,14 +193,14 @@ mod tests {
     #[test]
     fn set_16() {
         let mut registers = Registers::new();
-        registers.set_16bit(&RegisterPair::Af, 0x0A0C);
-        assert_eq!(registers.a, 0x0A);
-        assert_eq!(registers.f, 0x0C);
+        registers.set_16bit(&RegisterPair::Hl, 0x0A0C);
+        assert_eq!(registers.h, 0x0A);
+        assert_eq!(registers.l, 0x0C);
     }
     #[test]
     fn set_16_then_get_16() {
         let mut registers = Registers::new();
-        registers.set_16bit(&RegisterPair::Af, 0x0A0C);
-        assert_eq!(registers.get_16bit(&RegisterPair::Af), 0x0A0C);
+        registers.set_16bit(&RegisterPair::Hl, 0x0A0C);
+        assert_eq!(registers.get_16bit(&RegisterPair::Hl), 0x0A0C);
     }
 }

@@ -127,8 +127,7 @@ impl Cpu {
                         result =
                             (self.registers.get(&Register::A) - self.registers.get(reg)) as u16;
                         half_carry = (self.registers.get(&Register::A) & 0xF)
-                            - (self.registers.get(reg) & 0xF)
-                            >= 0x10;
+                            < (self.registers.get(reg) & 0xF);
                         carry = self.registers.get(reg) > (self.registers.get(&Register::A));
                         self.registers.set(&Register::A, result as u8);
                     }
@@ -137,15 +136,14 @@ impl Cpu {
                             .memory
                             .read_byte(self.registers.get_16bit(&RegisterPair::Hl));
                         result = (self.registers.get(&Register::A) - at_hl) as u16;
-                        half_carry =
-                            (self.registers.get(&Register::A) & 0xF) - (at_hl & 0xF) >= 0x10;
+                        half_carry = (self.registers.get(&Register::A) & 0xF) < (at_hl & 0xF);
                         carry = at_hl > self.registers.get(&Register::A);
                         self.registers.set(&Register::A, result as u8);
                     }
                     ArithmeticOperand::Data(d8) => {
                         // need to read 1 byte for d8
                         result = (self.registers.get(&Register::A) - *d8) as u16;
-                        half_carry = (self.registers.get(&Register::A) & 0xF) - (*d8 & 0xF) >= 0x10;
+                        half_carry = (self.registers.get(&Register::A) & 0xF) < (*d8 & 0xF);
                         carry = *d8 > self.registers.get(&Register::A);
                         self.registers.set(&Register::A, result as u8);
                     }
@@ -491,6 +489,50 @@ impl Cpu {
                 self.registers.set_flag(Flag::HalfCarry, false);
                 self.registers.set_flag(Flag::Carry, bit == 1);
             }
+            Instruction::DecimalAdjust => {
+                // doc here -> https://ehaskins.com/2018-01-30%20Z80%20DAA/
+                let a = self.registers.get(&Register::A);
+                let mut nybble_1 = a & 0xF;
+                let mut nybble_2 = ((a & 0xF0) >> 4) & 0xF;
+                let mut a_adjusted;
+                println!("Adjusting A: {:#x}", a);
+                if self.registers.get_flag(Flag::Subtract) {
+                    if nybble_1 > 0x9 || self.registers.get_flag(Flag::HalfCarry) {
+                        nybble_1 -= 0x6;
+                    }
+                    if nybble_2 > 0x9 || self.registers.get_flag(Flag::Carry) {
+                        nybble_2 -= 0x6;
+                    }
+                } else {
+                    if nybble_1 > 0x9 || self.registers.get_flag(Flag::HalfCarry) {
+                        nybble_1 += 0x6
+                    }
+                    if nybble_2 > 0x9 || self.registers.get_flag(Flag::Carry) {
+                        nybble_2 += 0x6
+                    }
+                }
+                a_adjusted = nybble_1 | (nybble_2 << 4);
+                self.registers.set(&Register::A, a_adjusted);
+                self.registers.set_flag(Flag::Carry, a_adjusted > 0x99);
+                self.registers.set_flag(Flag::HalfCarry, false);
+                self.registers.set_flag(Flag::Zero, a_adjusted == 0x0);
+            }
+            Instruction::Complement => {
+                let a = self.registers.get(&Register::A);
+                self.registers.set(&Register::A, !a);
+                self.registers.set_flag(Flag::HalfCarry, true);
+                self.registers.set_flag(Flag::Subtract, true);
+            }
+            Instruction::FlipCarry => {
+                self.registers.set_flag(Flag::HalfCarry, false);
+                self.registers.set_flag(Flag::Subtract, false);
+                self.registers
+                    .set_flag(Flag::Carry, !self.registers.get_flag(Flag::Carry));
+            }
+            Instruction::Jump(kind) => match kind {
+                JumpKind::JumpRelative(a8) => self.pc += *a8 as u16,
+                JumpKind::JumpRelativeConditional()
+            },
             _ => panic!("Enounctered unimplemented instruction: {}", i),
         };
         self.pc + size as u16
@@ -526,5 +568,23 @@ mod test {
             Load16Source::Hl,
         ));
         assert_eq!(0xAB, cpu.sp);
+    }
+    #[test]
+    fn execute_daa_after_sub() {
+        let mut cpu = Cpu::new();
+        cpu.registers.set(&Register::A, 0x47);
+        cpu.registers.set(&Register::D, 0x28);
+        cpu.execute(&Instruction::Sub(ArithmeticOperand::Register(Register::D)));
+        cpu.execute(&Instruction::DecimalAdjust);
+        assert_eq!(0x19, cpu.registers.get(&Register::A));
+    }
+    #[test]
+    fn execute_daa_after_add() {
+        let mut cpu = Cpu::new();
+        cpu.registers.set(&Register::A, 0x47);
+        cpu.registers.set(&Register::D, 0x28);
+        cpu.execute(&Instruction::Add(ArithmeticOperand::Register(Register::D)));
+        cpu.execute(&Instruction::DecimalAdjust);
+        assert_eq!(0x75, cpu.registers.get(&Register::A));
     }
 }
