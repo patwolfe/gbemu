@@ -1,3 +1,6 @@
 /target
 *.bin
 *.txt
+*.gb
+*.svg
+.DS_Store

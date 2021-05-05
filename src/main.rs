@@ -1,5 +1,6 @@
 extern crate minifb;
 use minifb::{Key, Scale, ScaleMode, Window, WindowOptions};
+use std::time::Instant;
 
 mod cpu;
 mod gb;
@@ -36,17 +37,18 @@ fn main() {
 
     let mut cpu = Cpu::new();
     let mut ppu = Ppu::new();
+    let mut cycles_taken = 0;
     while window.is_open() && !window.is_key_down(Key::Escape) {
-        cpu.step();
-        ppu.draw_frame(&mut cpu.memory, &mut buffer);
+        let start_time = Instant::now();
+        while cycles_taken < gb::cycles_per_frame {
+            let cycles_instruction = cpu.step() as u32;
+            ppu.step(cycles_instruction, &mut cpu.memory, &mut buffer);
+            cycles_taken += cycles_instruction;
+        }
+        cycles_taken %= gb::cycles_per_frame;
         window
             .update_with_buffer(&buffer, gb::screen_width, gb::screen_height)
             .unwrap();
-    }
-}
-
-fn draw_screen(cpu: &Cpu, buffer: &mut Vec<u32>) {
-    for i in buffer.iter_mut() {
-        *i = 1;
+        // timer::sleep_to_frame_end(start_time);
     }
 }

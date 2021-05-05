@@ -14,6 +14,7 @@ pub use self::mmio_pointers::SCX as scx_addr;
 pub use self::mmio_pointers::SCY as scy_addr;
 pub use self::mmio_pointers::WX as wx_addr;
 pub use self::mmio_pointers::WY as wy_addr;
+pub use self::timings::CYCLES_PER_FRAME as cycles_per_frame;
 
 pub mod dimensions {
     pub const PIXELS_X: usize = 144;
@@ -39,4 +40,8 @@ pub mod mmio_pointers {
     pub const OBJ_PALETTE_1: u16 = 0xFF49;
     pub const WY: u16 = 0xFF4A;
     pub const WX: u16 = 0xFF4B;
+}
+
+pub mod timings {
+    pub const CYCLES_PER_FRAME: u32 = 69905;
 }

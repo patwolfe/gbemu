@@ -19,8 +19,9 @@ impl Tile {
         for i in 0..=7 {
             let color_index = ((byte_1 >> i) & 1) + (((byte_2 >> i) & 1) << 1);
             assert!(color_index < 4);
-            pixels[7 - i] = Pixel { color_index, prio };
+            pixels.push(Pixel { color_index, prio });
         }
+        pixels.reverse();
         Tile { pixels }
     }
 }
@@ -43,13 +44,22 @@ pub enum LcdcFlag {
     BackgroundEnable,
 }
 
+enum PpuMode {
+    OamSearch = 2,
+    PixelTransfer = 3,
+    Hblank = 0,
+    Vblank = 1,
+}
+
 pub struct Ppu {
     bg_fifo: VecDeque<Pixel>,
     obj_fifo: VecDeque<Pixel>,
-    mode: u8,
-    cycles: u64,
-    pusher_current_x: u8,
+    mode: PpuMode,
+    cycles_this_frame: u64,
+    x: u8,
     fetcher_current_tile_index: u16,
+    sprite_buffer: Vec<Object>,
+    oam_offset: usize,
 }
 
 impl Ppu {
@@ -57,10 +67,12 @@ impl Ppu {
         Ppu {
             bg_fifo: VecDeque::with_capacity(16),
             obj_fifo: VecDeque::with_capacity(16),
-            mode: 0,
-            cycles: 0,
-            pusher_current_x: 0,
+            mode: PpuMode::OamSearch,
+            cycles_this_frame: 0,
+            x: 0,
             fetcher_current_tile_index: 0,
+            sprite_buffer: Vec::with_capacity(10),
+            oam_offset: 0,
         }
     }
 
@@ -78,87 +90,125 @@ impl Ppu {
         }
     }
 
-    pub fn fetch_pixels(&mut self, memory: &Memory, is_object: u8) {
-        if self.bg_fifo.len() > 8 {
-            return;
-        }
-        let base_tilemap_location: u16 = if Ppu::check_lcdc(memory, LcdcFlag::WindowTileMapArea)
-            || Ppu::check_lcdc(memory, LcdcFlag::TileMapArea)
-        {
-            0x9C00
-        } else {
-            0x09800
-        };
-        let base_tile_data_location = if Ppu::check_lcdc(memory, LcdcFlag::TileDataArea) {
-            0x8000
-        } else {
-            0x9000
-        };
-        let tile_number = memory.read_byte(base_tilemap_location + self.fetcher_current_tile_index);
-        let tile_data_low = memory.read_byte(base_tile_data_location + tile_number as u16);
-        let tile_data_high = memory.read_byte(base_tile_data_location + tile_number as u16 + 1);
-        let tile = Tile::from_bytes(tile_data_low, tile_data_high, is_object);
-        for p in tile.pixels {
-            self.bg_fifo.push_back(p);
-        }
-        // Get tile data low
-        // Get tile data high
-        // Push
-        // Sleep
-    }
-
-    pub fn scan_oam(&self, memory: &Memory, ly: u8) -> Vec<Object> {
-        let oam = &memory.oam;
-        let mut results = vec![];
-        // Check if object appears on this scanline
-        for i in 0..oam.len() / 4 {
-            //
-            if oam[i] <= ly + 16 && oam[i] + 8 > ly + 16 && oam[i + 1] != 0
-            // && oam[i + 1] <= self.current_x
-            // && oam[i + 1] + TILE_DIMENSION > self.current_x
-            {
-                results.push(Object {
-                    y: oam[i],
-                    x: oam[i + 1],
-                    index: oam[i + 2],
-                    attr: oam[i + 3],
-                })
+    pub fn step(&mut self, cycles: u32, memory: &mut Memory, buffer: &mut Vec<u32>) {
+        let mut cycles_taken = 0;
+        while cycles_taken < cycles {
+            if !Ppu::check_lcdc(memory, LcdcFlag::Enable) {
+                return;
             }
-            // can only have 10 objects per scanline
-            if results.len() == 10 {
-                break;
-            }
-        }
-        results
-    }
-
-    pub fn draw_scanline(&mut self, memory: &mut Memory, buffer: &mut Vec<u32>) {
-        let ly = memory.read_byte(gb::ly_addr);
-        // this is mode 2, always takes 20 cycles
-        let objects = self.scan_oam(memory, ly);
-        while (self.pusher_current_x as usize) < gb::screen_width {
-            self.fetch_pixels(memory, 0);
-            self.push_pixels(memory, buffer);
-        }
-        self.pusher_current_x = 0;
-    }
-    fn push_pixels(&mut self, memory: &mut Memory, buffer: &mut Vec<u32>) {
-        if self.bg_fifo.len() > 8 {
+            let curr_cycle = 1 + (self.cycles_this_frame % 114);
             let ly = memory.read_byte(gb::ly_addr);
-            let curr_pixel = self.bg_fifo.pop_front().unwrap();
-            // TODO: use BGP or OBP to map color index -> color value
-            buffer[ly as usize * gb::screen_width + self.pusher_current_x as usize] =
-                curr_pixel.color_index as u32;
-            self.pusher_current_x += 1;
+            let lcd_stat = memory.read_byte(gb::lcd_stat);
+            let mode = lcd_stat & 0x3;
+            match mode {
+                // OAM search
+                0x2 => {
+                    if self.sprite_buffer.len() == 10 {
+                        continue;
+                    }
+                    let oam = &memory.oam;
+                    for i in self.oam_offset..self.oam_offset + 4 {
+                        let index = i * 4;
+                        if oam[index] <= ly + 16 && oam[index] + 8 > ly + 16 && oam[index + 1] != 0
+                        {
+                            self.sprite_buffer.push(Object {
+                                y: oam[index],
+                                x: oam[index + 1],
+                                index: oam[index + 2],
+                                attr: oam[index + 3],
+                            })
+                        }
+                    }
+                    if curr_cycle == 20 {
+                        // sort sprite buffer by x
+                        memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x3)
+                    }
+                }
+                0x3 => {
+                    if self.bg_fifo.len() <= 8 {
+                        // fetch tile
+                        let base_tilemap_location: u16 =
+                            if Ppu::check_lcdc(memory, LcdcFlag::WindowTileMapArea)
+                                || Ppu::check_lcdc(memory, LcdcFlag::TileMapArea)
+                            {
+                                0x9C00
+                            } else {
+                                0x09800
+                            };
+                        let base_tile_data_location =
+                            if Ppu::check_lcdc(memory, LcdcFlag::TileDataArea) {
+                                0x8000
+                            } else {
+                                0x9000
+                            };
+                        let tile_number = memory
+                            .read_byte(base_tilemap_location + self.fetcher_current_tile_index);
+                        let tile_data_low =
+                            memory.read_byte(base_tile_data_location + tile_number as u16);
+                        let tile_data_high =
+                            memory.read_byte(base_tile_data_location + tile_number as u16 + 1);
+                        let tile = Tile::from_bytes(tile_data_low, tile_data_high, 0);
+                        for p in tile.pixels {
+                            self.bg_fifo.push_back(p);
+                        }
+                    } else {
+                        // push pixel
+                        let ly = memory.read_byte(gb::ly_addr);
+                        let curr_pixel = self.bg_fifo.pop_front().unwrap();
+                        // TODO: use BGP or OBP to map color index -> color value
+                        if ly as usize * gb::screen_width + self.x as usize > buffer.len() {
+                            panic!("ly: {} * 144 + x: {}", ly, self.x);
+                        }
+                        buffer[ly as usize * gb::screen_width + self.x as usize] =
+                            Ppu::get_color(curr_pixel.color_index) as u32;
+                        self.x += 1;
+                    }
+                    if self.x == 160 {
+                        self.x = 0;
+                        memory.write_byte(gb::lcd_stat, lcd_stat & 0xFC)
+                    }
+                }
+                0x0 => {
+                    if curr_cycle == 114 {
+                        self.bg_fifo.clear();
+                        if ly == 144 {
+                            memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x1)
+                        } else {
+                            memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x2)
+                        }
+                    }
+                }
+                0x1 => {
+                    if memory.read_byte(gb::ly_addr) == 153 {
+                        memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x2);
+                    }
+                }
+                _ => panic!("Unexpected PPU mode: {}", mode),
+            };
+            if curr_cycle == 114 {
+                if ly == 153 {
+                    memory.write_byte(gb::ly_addr, 0);
+                    println!("setting ly to 0");
+                } else {
+                    memory.write_byte(gb::ly_addr, ly + 1);
+                    println!("setting ly to {}", ly + 1);
+                }
+            }
+            if self.cycles_this_frame == 17555 {
+                self.cycles_this_frame = 0
+            } else {
+                self.cycles_this_frame += 1;
+            }
+            cycles_taken += 1;
         }
     }
-
-    pub fn draw_frame(&mut self, memory: &mut Memory, buffer: &mut Vec<u32>) {
-        let mut ly = memory.read_byte(gb::ly_addr);
-        while (ly as usize) < gb::screen_height {
-            self.draw_scanline(memory, buffer);
-            ly += 1;
-            memory.write_byte(gb::ly_addr, ly);
+    pub fn get_color(i: u8) -> u32 {
+        match i {
+            0 => 0x00FF,
+            1 => 0x0FF0,
+            2 => 0x00F0,
+            3 => 0x000F,
+            _ => panic!(),
         }
     }
 }

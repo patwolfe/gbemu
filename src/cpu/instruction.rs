@@ -96,11 +96,11 @@ impl Instruction {
                 match high_bits {
                     0x2 => Instruction::Jump(JumpKind::JumpRelativeConditional(
                         JumpCondition::NonZero,
-                        offset,
+                        offset as i8,
                     )),
                     0x3 => Instruction::Jump(JumpKind::JumpRelativeConditional(
                         JumpCondition::NonCarry,
-                        offset,
+                        offset as i8,
                     )),
                     _ => panic!("Invalid opcode: {:#x}", byte),
                 }
@@ -163,7 +163,7 @@ impl Instruction {
                 Instruction::Load8(target, Load8Operand::Data(data))
             }
             (0x0..=0x1, 0x7) => match high_bits {
-                0x0 => Instruction::Rotate(RotateKind::LeftCarry),
+                0x0 => Instruction::Rotate(RotateKind::LeftCircular),
                 0x1 => Instruction::Rotate(RotateKind::Left),
                 _ => panic!("Invalid opcode: {:#x}", byte),
             },
@@ -180,14 +180,14 @@ impl Instruction {
             (0x1..=0x3, 0x8) => {
                 let offset = memory.read_byte(a + 1);
                 match high_bits {
-                    0x1 => Instruction::Jump(JumpKind::JumpRelative(offset)),
+                    0x1 => Instruction::Jump(JumpKind::JumpRelative(offset as i8)),
                     0x2 => Instruction::Jump(JumpKind::JumpRelativeConditional(
                         JumpCondition::Zero,
-                        offset,
+                        offset as i8,
                     )),
                     0x3 => Instruction::Jump(JumpKind::JumpRelativeConditional(
                         JumpCondition::Carry,
-                        offset,
+                        offset as i8,
                     )),
                     _ => panic!("Invalid opcode: {:#x}", byte),
                 }
@@ -248,7 +248,7 @@ impl Instruction {
                 Instruction::DecrementPtr(operand)
             }
             (0x0..=0x1, 0xF) => match high_bits {
-                0x0 => Instruction::Rotate(RotateKind::RightCarry),
+                0x0 => Instruction::Rotate(RotateKind::RightCircular),
                 0x1 => Instruction::Rotate(RotateKind::Right),
                 _ => panic!("Invalid opcode: {:#x}", byte),
             },
@@ -373,8 +373,7 @@ impl Instruction {
                 Instruction::Pop(reg)
             }
             (0xC..=0xD, 0x2) => {
-                let a16: u16 =
-                    (memory.read_byte(a + 1) as u16) | (memory.read_byte(a + 2) as u16) << 8;
+                let a16 = (memory.read_byte(a + 1) as u16) | (memory.read_byte(a + 2) as u16) << 8;
                 let cond = match high_bits {
                     0xC => JumpCondition::NonZero,
                     0xD => JumpCondition::NonCarry,
@@ -532,14 +531,14 @@ impl Instruction {
         };
         match low_bits {
             0x0..=0x7 => match high_bits {
-                0x0 => Instruction16::RotateLeftCarry(reg),
+                0x0 => Instruction16::RotateLeftCircular(reg),
                 0x1 => Instruction16::RotateLeft(reg),
                 0x2 => Instruction16::ShiftLeft(reg),
                 0x3 => Instruction16::Swap(reg),
-                0x4 => Instruction16::BitwiseComplement(0, reg),
-                0x5 => Instruction16::BitwiseComplement(2, reg),
-                0x6 => Instruction16::BitwiseComplement(4, reg),
-                0x7 => Instruction16::BitwiseComplement(6, reg),
+                0x4 => Instruction16::BitComplement(0, reg),
+                0x5 => Instruction16::BitComplement(2, reg),
+                0x6 => Instruction16::BitComplement(4, reg),
+                0x7 => Instruction16::BitComplement(6, reg),
                 0x8 => Instruction16::Reset(0, reg),
                 0x9 => Instruction16::Reset(2, reg),
                 0xA => Instruction16::Reset(4, reg),
@@ -551,14 +550,14 @@ impl Instruction {
                 _ => panic!("Invalid 16 bit instruction suffix: {:#x}", suffix),
             },
             0x8..=0xF => match high_bits {
-                0x0 => Instruction16::RotateRightCarry(reg),
+                0x0 => Instruction16::RotateRightCircular(reg),
                 0x1 => Instruction16::RotateRight(reg),
                 0x2 => Instruction16::ShiftRightArithmetic(reg),
                 0x3 => Instruction16::ShiftRightLogical(reg),
-                0x4 => Instruction16::BitwiseComplement(1, reg),
-                0x5 => Instruction16::BitwiseComplement(3, reg),
-                0x6 => Instruction16::BitwiseComplement(5, reg),
-                0x7 => Instruction16::BitwiseComplement(7, reg),
+                0x4 => Instruction16::BitComplement(1, reg),
+                0x5 => Instruction16::BitComplement(3, reg),
+                0x6 => Instruction16::BitComplement(5, reg),
+                0x7 => Instruction16::BitComplement(7, reg),
                 0x8 => Instruction16::Reset(1, reg),
                 0x9 => Instruction16::Reset(3, reg),
                 0xA => Instruction16::Reset(5, reg),
@@ -708,7 +707,7 @@ impl fmt::Display for Load16Source {
         let operand_string = match self {
             Load16Source::Hl => String::from("HL"),
             Load16Source::StackPointer => String::from("SP"),
-            Load16Source::SpPlus(r8) => std::format!("SP+{}", r8),
+            Load16Source::SpPlus(r8) => std::format!("SP+{:#0x}", r8),
             Load16Source::Data(data) => std::format!("${:#0x}", data),
         };
         write!(f, "{}", operand_string)
@@ -755,7 +754,7 @@ impl fmt::Display for ArithmeticOperand {
         let operand_string = match self {
             ArithmeticOperand::Register(reg) => std::format!("{}", reg),
             ArithmeticOperand::AtHl => String::from("(HL)"),
-            ArithmeticOperand::Data(u8) => std::format!("${}", u8),
+            ArithmeticOperand::Data(d8) => std::format!("${:#0x}", d8),
         };
         write!(f, "{}", operand_string)
     }
@@ -781,8 +780,8 @@ impl fmt::Display for PtrArithOperand {
 
 #[derive(Debug, PartialEq)]
 pub enum JumpKind {
-    JumpRelative(u8),
-    JumpRelativeConditional(JumpCondition, u8),
+    JumpRelative(i8),
+    JumpRelativeConditional(JumpCondition, i8),
     Jump(u16),
     JumpConditional(JumpCondition, u16),
     JumpHl,
@@ -791,12 +790,12 @@ pub enum JumpKind {
 impl fmt::Display for JumpKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let kind = match self {
-            JumpKind::JumpRelative(offset) => std::format!("R {}", offset),
+            JumpKind::JumpRelative(offset) => std::format!("R {:#0x}", offset),
             JumpKind::JumpRelativeConditional(cond, offset) => {
-                std::format!("R {} {}", cond, offset)
+                std::format!("R {} {:#0x}", cond, offset)
             }
-            JumpKind::Jump(address) => std::format!("P {}", address),
-            JumpKind::JumpConditional(cond, address) => std::format!("P {} {}", cond, address),
+            JumpKind::Jump(address) => std::format!("P {:#0x}", address),
+            JumpKind::JumpConditional(cond, address) => std::format!("P {} {:#0x}", cond, address),
             JumpKind::JumpHl => String::from("P (HL)"),
         };
         write!(f, "{}", kind)
@@ -843,15 +842,15 @@ impl fmt::Display for ReturnKind {
 
 #[derive(Debug, PartialEq)]
 pub enum Instruction16 {
-    RotateLeftCarry(ArithmeticOperand),
+    RotateLeftCircular(ArithmeticOperand),
     RotateLeft(ArithmeticOperand),
-    RotateRightCarry(ArithmeticOperand),
+    RotateRightCircular(ArithmeticOperand),
     RotateRight(ArithmeticOperand),
     ShiftLeft(ArithmeticOperand),
     ShiftRightArithmetic(ArithmeticOperand),
     ShiftRightLogical(ArithmeticOperand),
     Swap(ArithmeticOperand),
-    BitwiseComplement(u8, ArithmeticOperand),
+    BitComplement(u8, ArithmeticOperand),
     Reset(u8, ArithmeticOperand),
     Set(u8, ArithmeticOperand),
 }
@@ -859,15 +858,15 @@ pub enum Instruction16 {
 impl fmt::Display for Instruction16 {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let kind_string = match self {
-            Instruction16::RotateLeftCarry(reg) => std::format!("RLC {}", reg),
+            Instruction16::RotateLeftCircular(reg) => std::format!("RLC {}", reg),
             Instruction16::RotateLeft(reg) => std::format!("RL {}", reg),
-            Instruction16::RotateRightCarry(reg) => std::format!("RRC {}", reg),
+            Instruction16::RotateRightCircular(reg) => std::format!("RRC {}", reg),
             Instruction16::RotateRight(reg) => std::format!("RR {}", reg),
             Instruction16::ShiftLeft(reg) => std::format!("SLA {}", reg),
             Instruction16::ShiftRightArithmetic(reg) => std::format!("SRA {}", reg),
             Instruction16::ShiftRightLogical(reg) => std::format!("SRL {}", reg),
             Instruction16::Swap(reg) => std::format!("SWAP {}", reg),
-            Instruction16::BitwiseComplement(val, reg) => std::format!("BIT {} {}", val, reg),
+            Instruction16::BitComplement(val, reg) => std::format!("BIT {} {}", val, reg),
             Instruction16::Reset(val, reg) => std::format!("BIT {} {}", val, reg),
             Instruction16::Set(val, reg) => std::format!("Set {} {}", val, reg),
         };
@@ -878,18 +877,18 @@ impl fmt::Display for Instruction16 {
 #[derive(Debug, PartialEq)]
 pub enum RotateKind {
     Left,
-    LeftCarry,
+    LeftCircular,
     Right,
-    RightCarry,
+    RightCircular,
 }
 
 impl fmt::Display for RotateKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let kind_string = match self {
             RotateKind::Left => String::from("L"),
-            RotateKind::LeftCarry => String::from("LC"),
+            RotateKind::LeftCircular => String::from("LC"),
             RotateKind::Right => String::from("R"),
-            RotateKind::RightCarry => String::from("RC"),
+            RotateKind::RightCircular => String::from("RC"),
         };
         write!(f, "{}", kind_string)
     }
@@ -904,8 +903,8 @@ pub enum CallKind {
 impl fmt::Display for CallKind {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let kind_string = match self {
-            CallKind::Call(a16) => std::format!("{}", a16),
-            CallKind::CallConditional(a16, cond) => std::format!("{} {}", a16, cond),
+            CallKind::Call(a16) => std::format!("{:#0x}", a16),
+            CallKind::CallConditional(a16, cond) => std::format!("{:#0x} {}", a16, cond),
         };
         write!(f, "{}", kind_string)
     }
@@ -1140,7 +1139,7 @@ mod tests {
         );
         assert_eq!(
             Instruction::from_bytes(&memory, 8),
-            Instruction::Instruction16(Instruction16::BitwiseComplement(
+            Instruction::Instruction16(Instruction16::BitComplement(
                 7,
                 ArithmeticOperand::Register(Register::H)
             ))

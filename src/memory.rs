@@ -1,6 +1,8 @@
 use std::env;
 use std::fs::File;
+use std::io::prelude::*;
 use std::io::Read;
+use std::io::SeekFrom;
 
 pub struct Memory {
     pub rom_bank0: Vec<u8>,
@@ -35,10 +37,16 @@ pub const IR: u16 = 0xFFFF;
 impl Memory {
     pub fn initialize() -> Memory {
         let bootrom_path = env::var("BOOTROM").unwrap();
+        let rom_path = env::var("ROM").unwrap();
         let mut rom_bank0 = vec![0; (ROM0_END - ROM0_START + 1) as usize];
+        // let mut rom_data: Vec<u8> = Vec::new();
         File::open(bootrom_path)
             .unwrap()
             .read_exact(&mut rom_bank0.as_mut_slice()[0..=255])
+            .unwrap();
+        let mut rom = File::open(rom_path).unwrap();
+        rom.seek(SeekFrom::Start(0x100)).unwrap();
+        rom.read_exact(&mut rom_bank0.as_mut_slice()[256..=(ROM0_END as usize)])
             .unwrap();
         let rom_bank1 = vec![0; (ROM1_END - ROM1_START + 1) as usize];
         let vram = vec![0; (VRAM_END - VRAM_START + 1) as usize];
@@ -85,7 +93,7 @@ impl Memory {
     }
 
     pub fn read_2_bytes(&self, a: u16) -> u16 {
-        (self.read_byte(a + 1) as u16) | (self.read_byte(a + 2) as u16) << 8
+        (self.read_byte(a) as u16) | (self.read_byte(a + 1) as u16) << 8
     }
 
     pub fn write_byte(&mut self, address: u16, value: u8) {
