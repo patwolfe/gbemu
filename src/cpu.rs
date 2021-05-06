@@ -19,18 +19,20 @@ pub struct Cpu {
 
 impl Cpu {
     pub fn new() -> Cpu {
+        let mut memory = Memory::initialize();
+        memory.write_byte(gb::lcd_stat, 0x02);
         Cpu {
             registers: Registers::new(),
             pc: 0, //gb::init_pc_value,
             sp: 0,
-            memory: Memory::initialize(),
+            memory,
             _current_instruction: (Instruction::Nop, 0),
         }
     }
 
     pub fn step(&mut self) -> u8 {
         let instruction = Instruction::from_bytes(&self.memory, self.pc);
-        println!("{:#0x}: {}, {}", self.pc, instruction, self.registers);
+        // println!("{:#0x}: {}, {}", self.pc, instruction, self.registers);
         self.execute(&instruction)
     }
 

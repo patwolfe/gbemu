@@ -49,6 +49,7 @@ fn main() {
         window
             .update_with_buffer(&buffer, gb::screen_width, gb::screen_height)
             .unwrap();
-        // timer::sleep_to_frame_end(start_time);
+
+        timer::sleep_to_frame_end(start_time);
     }
 }

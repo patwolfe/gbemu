@@ -1,14 +1,21 @@
 use std::collections::VecDeque;
+use std::fmt;
 
 use crate::gb;
 use crate::memory::Memory;
 
+#[derive(Debug)]
 pub struct Pixel {
     color_index: u8,
     // 0 == background pixel, 1 == sprite pixel
     prio: u8,
 }
 
+impl fmt::Display for Pixel {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "[color_index: {} prio: {}]", self.color_index, self.prio)
+    }
+}
 pub struct Tile {
     pixels: Vec<Pixel>,
 }
@@ -17,12 +24,18 @@ impl Tile {
     pub fn from_bytes(byte_1: u8, byte_2: u8, prio: u8) -> Tile {
         let mut pixels = Vec::with_capacity(8);
         for i in 0..=7 {
-            let color_index = ((byte_1 >> i) & 1) + (((byte_2 >> i) & 1) << 1);
+            let color_index = ((byte_1 >> i) & 1) | (((byte_2 >> i) & 1) << 1);
             assert!(color_index < 4);
             pixels.push(Pixel { color_index, prio });
         }
         pixels.reverse();
         Tile { pixels }
+    }
+}
+
+impl fmt::Display for Tile {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{:?}", self.pixels)
     }
 }
 
@@ -57,7 +70,7 @@ pub struct Ppu {
     mode: PpuMode,
     cycles_this_frame: u64,
     x: u8,
-    fetcher_current_tile_index: u16,
+    fetcher_x_position: u16,
     sprite_buffer: Vec<Object>,
     oam_offset: usize,
 }
@@ -70,7 +83,7 @@ impl Ppu {
             mode: PpuMode::OamSearch,
             cycles_this_frame: 0,
             x: 0,
-            fetcher_current_tile_index: 0,
+            fetcher_x_position: 0,
             sprite_buffer: Vec::with_capacity(10),
             oam_offset: 0,
         }
@@ -96,7 +109,8 @@ impl Ppu {
             if !Ppu::check_lcdc(memory, LcdcFlag::Enable) {
                 return;
             }
-            let curr_cycle = 1 + (self.cycles_this_frame % 114);
+            let curr_cycle = 1 + self.cycles_this_frame % 114;
+
             let ly = memory.read_byte(gb::ly_addr);
             let lcd_stat = memory.read_byte(gb::lcd_stat);
             let mode = lcd_stat & 0x3;
@@ -133,7 +147,7 @@ impl Ppu {
                             {
                                 0x9C00
                             } else {
-                                0x09800
+                                0x9800
                             };
                         let base_tile_data_location =
                             if Ppu::check_lcdc(memory, LcdcFlag::TileDataArea) {
@@ -141,30 +155,54 @@ impl Ppu {
                             } else {
                                 0x9000
                             };
-                        let tile_number = memory
-                            .read_byte(base_tilemap_location + self.fetcher_current_tile_index);
-                        let tile_data_low =
-                            memory.read_byte(base_tile_data_location + tile_number as u16);
-                        let tile_data_high =
-                            memory.read_byte(base_tile_data_location + tile_number as u16 + 1);
-                        let tile = Tile::from_bytes(tile_data_low, tile_data_high, 0);
-                        for p in tile.pixels {
+
+                        let scy = memory.read_byte(gb::scy_addr);
+                        let scx = memory.read_byte(gb::scx_addr);
+                        let background_tile_offset = 32 * ((ly + scy) / 8) as u16;
+                        let tile_index = base_tilemap_location
+                            + self.fetcher_x_position as u16
+                            + (scx / 8) as u16
+                            + background_tile_offset;
+                        let tile_number = memory.read_byte(tile_index);
+                        let tile_data_address = base_tile_data_location
+                            + (tile_number as u16 * 0x10)
+                            + (2 * ((ly + scy) % 8) as u16);
+                        let tile_data_low = memory.read_byte(tile_data_address);
+                        let tile_data_high = memory.read_byte(tile_data_address + 0x1);
+
+                        let mut pixels = Vec::with_capacity(8);
+                        for i in 0..=7 {
+                            let color_index =
+                                ((tile_data_high >> i) & 1) | (((tile_data_low >> i) & 1) << 1);
+                            assert!(color_index < 4);
+                            pixels.push(Pixel {
+                                color_index,
+                                prio: 0,
+                            });
+                        }
+                        pixels.reverse();
+                        for p in pixels {
                             self.bg_fifo.push_back(p);
                         }
-                    } else {
+                        self.fetcher_x_position += 1
+                    }
+                    if !self.bg_fifo.is_empty() {
                         // push pixel
                         let ly = memory.read_byte(gb::ly_addr);
-                        let curr_pixel = self.bg_fifo.pop_front().unwrap();
                         // TODO: use BGP or OBP to map color index -> color value
-                        if ly as usize * gb::screen_width + self.x as usize > buffer.len() {
-                            panic!("ly: {} * 144 + x: {}", ly, self.x);
+                        for _ in 0..2 {
+                            let curr_pixel = self.bg_fifo.pop_front().unwrap();
+                            if ly as usize * gb::screen_width + self.x as usize > buffer.len() {
+                                panic!("ly: {} * 144 + x: {}", ly, self.x);
+                            }
+                            buffer[ly as usize * gb::screen_width + self.x as usize] =
+                                Ppu::get_color(curr_pixel.color_index) as u32;
+                            self.x += 1;
                         }
-                        buffer[ly as usize * gb::screen_width + self.x as usize] =
-                            Ppu::get_color(curr_pixel.color_index) as u32;
-                        self.x += 1;
                     }
                     if self.x == 160 {
                         self.x = 0;
+                        self.fetcher_x_position = 0;
                         memory.write_byte(gb::lcd_stat, lcd_stat & 0xFC)
                     }
                 }
@@ -188,13 +226,11 @@ impl Ppu {
             if curr_cycle == 114 {
                 if ly == 153 {
                     memory.write_byte(gb::ly_addr, 0);
-                    println!("setting ly to 0");
                 } else {
                     memory.write_byte(gb::ly_addr, ly + 1);
-                    println!("setting ly to {}", ly + 1);
                 }
             }
-            if self.cycles_this_frame == 17555 {
+            if self.cycles_this_frame == 17556 {
                 self.cycles_this_frame = 0
             } else {
                 self.cycles_this_frame += 1;
@@ -204,10 +240,10 @@ impl Ppu {
     }
     pub fn get_color(i: u8) -> u32 {
         match i {
-            0 => 0x00FF,
-            1 => 0x0FF0,
-            2 => 0x00F0,
-            3 => 0x000F,
+            3 => 0x000f380f,
+            2 => 0x00306230,
+            1 => 0x008bac0f,
+            0 => 0x009bbc0f,
             _ => panic!(),
         }
     }
