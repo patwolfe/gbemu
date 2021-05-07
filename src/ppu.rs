@@ -16,28 +16,6 @@ impl fmt::Display for Pixel {
         write!(f, "[color_index: {} prio: {}]", self.color_index, self.prio)
     }
 }
-pub struct Tile {
-    pixels: Vec<Pixel>,
-}
-
-impl Tile {
-    pub fn from_bytes(byte_1: u8, byte_2: u8, prio: u8) -> Tile {
-        let mut pixels = Vec::with_capacity(8);
-        for i in 0..=7 {
-            let color_index = ((byte_1 >> i) & 1) | (((byte_2 >> i) & 1) << 1);
-            assert!(color_index < 4);
-            pixels.push(Pixel { color_index, prio });
-        }
-        pixels.reverse();
-        Tile { pixels }
-    }
-}
-
-impl fmt::Display for Tile {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{:?}", self.pixels)
-    }
-}
 
 pub struct Object {
     y: u8,
@@ -67,7 +45,6 @@ enum PpuMode {
 pub struct Ppu {
     bg_fifo: VecDeque<Pixel>,
     obj_fifo: VecDeque<Pixel>,
-    mode: PpuMode,
     cycles_this_frame: u64,
     x: u8,
     fetcher_x_position: u16,
@@ -80,7 +57,6 @@ impl Ppu {
         Ppu {
             bg_fifo: VecDeque::with_capacity(16),
             obj_fifo: VecDeque::with_capacity(16),
-            mode: PpuMode::OamSearch,
             cycles_this_frame: 0,
             x: 0,
             fetcher_x_position: 0,
@@ -132,10 +108,6 @@ impl Ppu {
                                 attr: oam[index + 3],
                             })
                         }
-                    }
-                    if curr_cycle == 20 {
-                        // sort sprite buffer by x
-                        memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x3)
                     }
                 }
                 0x3 => {
@@ -192,50 +164,79 @@ impl Ppu {
                         // TODO: use BGP or OBP to map color index -> color value
                         for _ in 0..2 {
                             let curr_pixel = self.bg_fifo.pop_front().unwrap();
-                            if ly as usize * gb::screen_width + self.x as usize > buffer.len() {
+                            if ly as usize * gb::screen_width + self.x as usize >= buffer.len() {
                                 panic!("ly: {} * 144 + x: {}", ly, self.x);
                             }
+                            // println!(
+                            //     "Pushing {} at ({}, {}) during cycle {}",
+                            //     Ppu::get_color(curr_pixel.color_index),
+                            //     self.x,
+                            //     ly,
+                            //     curr_cycle
+                            // );
                             buffer[ly as usize * gb::screen_width + self.x as usize] =
                                 Ppu::get_color(curr_pixel.color_index) as u32;
                             self.x += 1;
                         }
                     }
-                    if self.x == 160 {
-                        self.x = 0;
-                        self.fetcher_x_position = 0;
-                        memory.write_byte(gb::lcd_stat, lcd_stat & 0xFC)
-                    }
                 }
                 0x0 => {
-                    if curr_cycle == 114 {
-                        self.bg_fifo.clear();
-                        if ly == 144 {
-                            memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x1)
-                        } else {
-                            memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x2)
-                        }
-                    }
+                    // println!("In hblank mode");
                 }
                 0x1 => {
-                    if memory.read_byte(gb::ly_addr) == 153 {
-                        memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x2);
-                    }
+                    // println!("In vblank mode @ cycle {}", curr_cycle);
                 }
                 _ => panic!("Unexpected PPU mode: {}", mode),
             };
             if curr_cycle == 114 {
-                if ly == 153 {
-                    memory.write_byte(gb::ly_addr, 0);
-                } else {
-                    memory.write_byte(gb::ly_addr, ly + 1);
-                }
+                // println!("setting ly to {}", ly + 1);
+                memory.write_byte(gb::ly_addr, ly + 1);
             }
             if self.cycles_this_frame == 17556 {
                 self.cycles_this_frame = 0
             } else {
                 self.cycles_this_frame += 1;
             }
+            self.update_mode(memory, curr_cycle);
             cycles_taken += 1;
+        }
+    }
+    fn update_mode(&mut self, memory: &mut Memory, curr_cycle: u64) {
+        let lcd_stat = memory.read_byte(gb::lcd_stat);
+        let mode = lcd_stat & 0x3;
+        let ly = memory.read_byte(gb::ly_addr);
+        match mode {
+            // OAM search
+            0x2 => {
+                if curr_cycle == 20 {
+                    // sort sprite buffer by x
+                    memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x3)
+                }
+            }
+            0x3 => {
+                if self.x == 160 {
+                    self.x = 0;
+                    self.fetcher_x_position = 0;
+                    memory.write_byte(gb::lcd_stat, lcd_stat & 0xFC)
+                }
+            }
+            0x0 => {
+                if curr_cycle == 114 {
+                    self.bg_fifo.clear();
+                    if ly == 144 {
+                        memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x1)
+                    } else {
+                        memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x2)
+                    }
+                }
+            }
+            0x1 => {
+                if ly == 153 {
+                    memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x2);
+                    memory.write_byte(gb::ly_addr, 0);
+                }
+            }
+            _ => panic!("Invalid mode"),
         }
     }
     pub fn get_color(i: u8) -> u32 {

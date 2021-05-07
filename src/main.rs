@@ -38,6 +38,7 @@ fn main() {
     let mut cpu = Cpu::new();
     let mut ppu = Ppu::new();
     let mut cycles_taken = 0;
+    #[allow(clippy::never_loop)]
     while window.is_open() && !window.is_key_down(Key::Escape) {
         let start_time = Instant::now();
         while cycles_taken < gb::cycles_per_frame {

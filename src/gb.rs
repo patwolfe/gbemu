@@ -17,8 +17,8 @@ pub use self::mmio_pointers::WY as wy_addr;
 pub use self::timings::CYCLES_PER_FRAME as cycles_per_frame;
 
 pub mod dimensions {
-    pub const PIXELS_X: usize = 144;
-    pub const PIXELS_Y: usize = 160;
+    pub const PIXELS_Y: usize = 144;
+    pub const PIXELS_X: usize = 160;
     pub const PIXELS_TOTAL: usize = PIXELS_X * PIXELS_Y;
 }
 

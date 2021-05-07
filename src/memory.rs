@@ -118,7 +118,7 @@ impl Memory {
         };
     }
     pub fn write_2_bytes(&mut self, a: u16, value: u16) {
-        self.write_byte(a + 1, (value as u8));
-        self.write_byte(a, ((value >> 8) as u8));
+        self.write_byte(a + 1, value as u8);
+        self.write_byte(a, (value >> 8) as u8);
     }
 }

@@ -802,7 +802,6 @@ impl Cpu {
             }
             Instruction16::Reset(index, operand) => self.set_bit(*index, operand, 0),
             Instruction16::Set(index, operand) => self.set_bit(*index, operand, 1),
-            _ => panic!("Bad instruciton16: {}", instruction),
         }
     }
 
@@ -905,7 +904,7 @@ impl Cpu {
 
     fn update_cycles(cycles: Cycles, branch_taken: bool) -> Cycles {
         match cycles {
-            Cycles::Cycles(n) => cycles,
+            Cycles::Cycles(_) => cycles,
             Cycles::ConditionalCycles(n, m) => {
                 if branch_taken {
                     Cycles::Cycles(n)

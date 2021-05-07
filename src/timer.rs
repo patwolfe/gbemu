@@ -4,7 +4,6 @@ const MICRO_PER_FRAME: u64 = 16667;
 
 pub fn sleep_to_frame_end(start: time::Instant) {
     let elapsed_micros = (time::Instant::now() - start).as_micros() as u64;
-    println!("{} have passed", elapsed_micros);
     if elapsed_micros < MICRO_PER_FRAME {
         thread::sleep(time::Duration::from_micros(
             MICRO_PER_FRAME - elapsed_micros,
