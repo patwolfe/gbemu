@@ -14,6 +14,7 @@ pub struct Memory {
     pub io: Vec<u8>,
     pub hram: Vec<u8>,
     pub interrupt_register: u8,
+    pub rom_low_bytes: Vec<u8>,
 }
 
 pub const ROM0_START: u16 = 0x0000;
@@ -39,14 +40,14 @@ impl Memory {
         let bootrom_path = env::var("BOOTROM").unwrap();
         let rom_path = env::var("ROM").unwrap();
         let mut rom_bank0 = vec![0; (ROM0_END - ROM0_START + 1) as usize];
-        // let mut rom_data: Vec<u8> = Vec::new();
+        let mut rom_low_bytes = vec![0; 0x100];
         File::open(bootrom_path)
             .unwrap()
             .read_exact(&mut rom_bank0.as_mut_slice()[0..=255])
             .unwrap();
         let mut rom = File::open(rom_path).unwrap();
-        rom.seek(SeekFrom::Start(0x100)).unwrap();
-        rom.read_exact(&mut rom_bank0.as_mut_slice()[256..=(ROM0_END as usize)])
+        rom.read_exact(&mut rom_low_bytes).unwrap();
+        rom.read_exact(&mut rom_bank0.as_mut_slice()[0x100..=(ROM0_END as usize)])
             .unwrap();
         let rom_bank1 = vec![0; (ROM1_END - ROM1_START + 1) as usize];
         let vram = vec![0; (VRAM_END - VRAM_START + 1) as usize];
@@ -67,6 +68,7 @@ impl Memory {
             io,
             hram,
             interrupt_register,
+            rom_low_bytes,
         }
     }
 
@@ -77,10 +79,7 @@ impl Memory {
             VRAM_START..=VRAM_END => self.vram[(address as usize) - 0x8000],
             ERAM_START..=ERAM_END => self.eram[(address as usize) - 0xA000],
             WRAM_START..=WRAM_END => self.wram[(address as usize) - 0xC000],
-            0xE000..=0xFDFF => panic!(
-                "Address {:#0x} attempts to access prohibited region of memory",
-                address
-            ),
+            0xE000..=0xFDFF => 0xFF,
             OAM_START..=OAM_END => self.oam[(address as usize) - 0xFE00],
             0xFEA0..=0xFEFF => panic!(
                 "Address {:#0x} attempts to access prohibited region of memory",
@@ -103,15 +102,9 @@ impl Memory {
             VRAM_START..=VRAM_END => self.vram[(address as usize) - 0x8000] = value,
             ERAM_START..=ERAM_END => self.eram[(address as usize) - 0xA000] = value,
             WRAM_START..=WRAM_END => self.wram[(address as usize) - 0xC000] = value,
-            0xE000..=0xFDFF => panic!(
-                "Address {:#0x} attempts to write to prohibited region of memory",
-                address
-            ),
+            0xE000..=0xFDFF => {}
             OAM_START..=OAM_END => self.oam[(address as usize) - 0xFE00] = value,
-            0xFEA0..=0xFEFF => panic!(
-                "Address {:#0x} attempts to write to prohibited region of memory",
-                address
-            ),
+            0xFEA0..=0xFEFF => {}
             IO_START..=IO_END => self.io[(address as usize) - 0xFF00] = value,
             HRAM_START..=HRAM_END => self.hram[(address as usize) - 0xFF80] = value,
             IR => self.interrupt_register = value,
@@ -120,5 +113,10 @@ impl Memory {
     pub fn write_2_bytes(&mut self, a: u16, value: u16) {
         self.write_byte(a + 1, value as u8);
         self.write_byte(a, (value >> 8) as u8);
+    }
+
+    pub fn replace_bootrom(&mut self) {
+        self.rom_bank0
+            .splice(0..0x100, self.rom_low_bytes.as_slice().iter().cloned());
     }
 }

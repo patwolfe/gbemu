@@ -13,6 +13,7 @@ pub struct Cpu {
     registers: Registers,
     pc: u16,
     sp: u16,
+    finished_bootrom: bool,
     pub memory: Memory,
     _current_instruction: (Instruction, u8),
 }
@@ -26,13 +27,18 @@ impl Cpu {
             pc: 0, //gb::init_pc_value,
             sp: 0,
             memory,
+            finished_bootrom: false,
             _current_instruction: (Instruction::Nop, 0),
         }
     }
 
     pub fn step(&mut self) -> u8 {
+        if self.pc == 0x100 && !self.finished_bootrom {
+            self.memory.replace_bootrom();
+            self.finished_bootrom = true;
+        }
         let instruction = Instruction::from_bytes(&self.memory, self.pc);
-        // println!("{:#0x}: {}, {}", self.pc, instruction, self.registers);
+        //println!("{:#0x}: {}, {}", self.pc, instruction, self.registers);
         self.execute(&instruction)
     }
 
@@ -82,10 +88,44 @@ impl Cpu {
                 (Load8Operand::Register(target_reg), Load8Operand::Data(d8)) => {
                     self.registers.set(&target_reg, *d8);
                 }
+                (Load8Operand::Register(target_reg), Load8Operand::AtHli)
+                | (Load8Operand::Register(target_reg), Load8Operand::AtHld) => {
+                    let address: u16 = self.registers.get_16bit(&RegisterPair::Hl);
+                    match operand2 {
+                        Load8Operand::AtHli => {
+                            self.registers.set_16bit(&RegisterPair::Hl, address + 1)
+                        }
+                        Load8Operand::AtHld => {
+                            self.registers.set_16bit(&RegisterPair::Hl, address - 1)
+                        }
+                        _ => panic!("Bad opereand to for LD A HLD/HLI"),
+                    };
+                    let data = self.memory.read_byte(address);
+                    self.registers.set(&target_reg, data);
+                }
+                (Load8Operand::AtHli, Load8Operand::Register(target_reg))
+                | (Load8Operand::AtHld, Load8Operand::Register(target_reg)) => {
+                    let address: u16 = self.registers.get_16bit(&RegisterPair::Hl);
+                    match operand1 {
+                        Load8Operand::AtHli => {
+                            self.registers.set_16bit(&RegisterPair::Hl, address + 1)
+                        }
+                        Load8Operand::AtHld => {
+                            self.registers.set_16bit(&RegisterPair::Hl, address - 1)
+                        }
+                        _ => panic!("Bad opereand to for LD HLD/HLI A"),
+                    };
+                    self.memory
+                        .write_byte(address, self.registers.get(target_reg));
+                }
                 (Load8Operand::AtReg16(reg), Load8Operand::Register(src_reg)) => {
                     let data = self.registers.get(src_reg);
                     let address: u16 = self.registers.get_16bit(reg);
                     self.memory.write_byte(address, data);
+                }
+                (Load8Operand::AtReg16(reg), Load8Operand::Data(data)) => {
+                    let address: u16 = self.registers.get_16bit(reg);
+                    self.memory.write_byte(address, *data);
                 }
                 (Load8Operand::Register(target_reg), Load8Operand::AtReg16(reg)) => {
                     let address: u16 = self.registers.get_16bit(reg);
@@ -170,7 +210,7 @@ impl Cpu {
                     }
                 };
                 // Set flags based on result
-                self.registers.set_flag(Flag::Zero, result == 0);
+                self.registers.set_flag(Flag::Zero, result as u8 == 0);
                 self.registers.set_flag(Flag::Carry, result > 0xFF);
                 self.registers.set_flag(Flag::Subtract, false);
                 self.registers.set_flag(Flag::HalfCarry, half_carry);
@@ -206,7 +246,7 @@ impl Cpu {
                     }
                 };
                 // Set flags based on result
-                self.registers.set_flag(Flag::Zero, result == 0);
+                self.registers.set_flag(Flag::Zero, result as u8 == 0);
                 self.registers.set_flag(Flag::HalfCarry, half_carry);
                 self.registers.set_flag(Flag::Carry, carry);
                 self.registers.set_flag(Flag::Subtract, true);
@@ -248,7 +288,7 @@ impl Cpu {
                     }
                 };
                 // Set flags based on result
-                self.registers.set_flag(Flag::Zero, result == 0);
+                self.registers.set_flag(Flag::Zero, result as u8 == 0);
                 self.registers.set_flag(Flag::Carry, result > 0xFF);
                 self.registers.set_flag(Flag::Subtract, false);
                 self.registers.set_flag(Flag::HalfCarry, half_carry);
@@ -299,7 +339,7 @@ impl Cpu {
                     }
                 };
                 // Set flags based on result
-                self.registers.set_flag(Flag::Zero, result == 0);
+                self.registers.set_flag(Flag::Zero, result as u8 == 0);
                 self.registers.set_flag(Flag::HalfCarry, half_carry);
                 self.registers.set_flag(Flag::Carry, carry);
                 self.registers.set_flag(Flag::Subtract, true);
@@ -327,7 +367,7 @@ impl Cpu {
                     }
                 };
                 // Set flags based on result
-                self.registers.set_flag(Flag::Zero, result == 0);
+                self.registers.set_flag(Flag::Zero, result as u8 == 0);
                 self.registers.set_flag(Flag::Subtract, false);
                 self.registers.set_flag(Flag::HalfCarry, true);
                 self.registers.set_flag(Flag::Carry, false);
@@ -355,7 +395,7 @@ impl Cpu {
                     }
                 };
                 // Set flags based on result
-                self.registers.set_flag(Flag::Zero, result == 0);
+                self.registers.set_flag(Flag::Zero, result as u8 == 0);
                 self.registers.set_flag(Flag::Subtract, false);
                 self.registers.set_flag(Flag::HalfCarry, false);
                 self.registers.set_flag(Flag::Carry, false);
@@ -383,7 +423,7 @@ impl Cpu {
                     }
                 };
                 // Set flags based on result
-                self.registers.set_flag(Flag::Zero, result == 0);
+                self.registers.set_flag(Flag::Zero, result as u8 == 0);
                 self.registers.set_flag(Flag::Subtract, false);
                 self.registers.set_flag(Flag::HalfCarry, false);
                 self.registers.set_flag(Flag::Carry, false);
@@ -444,7 +484,7 @@ impl Cpu {
                     _ => panic!("Enounctered malformed increment instruction: {}", i),
                 };
                 // Set flags based on result
-                self.registers.set_flag(Flag::Zero, result == 0);
+                self.registers.set_flag(Flag::Zero, result as u8 == 0);
                 self.registers.set_flag(Flag::Subtract, false);
                 self.registers.set_flag(Flag::HalfCarry, half_carry);
             }
@@ -474,7 +514,7 @@ impl Cpu {
                     _ => panic!("Enounctered malformed decrement instruction: {}", i),
                 };
                 // Set flags based on result
-                self.registers.set_flag(Flag::Zero, result == 0);
+                self.registers.set_flag(Flag::Zero, result as u8 == 0);
                 self.registers.set_flag(Flag::Subtract, true);
                 self.registers.set_flag(Flag::HalfCarry, half_carry);
             }
@@ -723,6 +763,19 @@ impl Cpu {
             Instruction::Restart(offset) => {
                 self.push(self.sp);
                 self.pc = *offset as u16;
+            }
+            Instruction::AddPtr(PtrArithOperand::Register16(RegisterPair::Hl), operand) => {
+                let mut result = self.registers.get_16bit(&RegisterPair::Hl);
+                match operand {
+                    PtrArithOperand::Register16(reg) => result += self.registers.get_16bit(reg),
+                    PtrArithOperand::StackPointer => result += self.sp,
+                    _ => panic!("Can't add d8 to HL"),
+                }
+                self.registers.set_16bit(&RegisterPair::Hl, result);
+                self.registers.set_flag(Flag::Carry, result & 0x8000 != 0);
+                self.registers
+                    .set_flag(Flag::HalfCarry, result & 0x0400 != 0);
+                self.registers.set_flag(Flag::Subtract, false);
             }
             Instruction::Instruction16(in16) => self.execute_instruction_16(in16),
             _ => panic!("Enounctered unimplemented instruction: {}", i),
