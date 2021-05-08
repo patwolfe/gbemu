@@ -15,7 +15,7 @@ pub struct Cpu {
     sp: u16,
     finished_bootrom: bool,
     pub memory: Memory,
-    ime: bool,
+    pub ime: bool,
     _current_instruction: (Instruction, u8),
 }
 

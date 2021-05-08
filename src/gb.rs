@@ -3,6 +3,8 @@ pub use self::dimensions::PIXELS_X as screen_width;
 pub use self::dimensions::PIXELS_Y as screen_height;
 pub use self::init_state::INIT_PC as init_pc_value;
 pub use self::init_state::INIT_SP as init_sp_value;
+pub use self::interrupt_pointers::IE as ie;
+pub use self::interrupt_pointers::IE as iflags;
 pub use self::mmio_pointers::DMA_TRANSFER as dma_reg;
 pub use self::mmio_pointers::LCDC as lcdc_addr;
 pub use self::mmio_pointers::LCD_STATUS as lcd_stat;
@@ -40,6 +42,11 @@ pub mod mmio_pointers {
     pub const OBJ_PALETTE_1: u16 = 0xFF49;
     pub const WY: u16 = 0xFF4A;
     pub const WX: u16 = 0xFF4B;
+}
+
+pub mod interrupt_pointers {
+    pub const IE: u16 = 0xFFFF;
+    pub const IF: u16 = 0xFF0F;
 }
 
 pub mod timings {
