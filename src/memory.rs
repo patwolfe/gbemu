@@ -96,6 +96,9 @@ impl Memory {
     }
 
     pub fn write_byte(&mut self, address: u16, value: u8) {
+        if address == 0xFF41 {
+            println!("Writing {:#0x} to LCD status reg", value)
+        };
         match address {
             ROM0_START..=ROM0_END => self.rom_bank0[address as usize] = value,
             ROM1_START..=ROM1_END => self.rom_bank1[(address as usize) - 0x4000] = value,

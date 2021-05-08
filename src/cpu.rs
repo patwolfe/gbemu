@@ -15,6 +15,7 @@ pub struct Cpu {
     sp: u16,
     finished_bootrom: bool,
     pub memory: Memory,
+    ime: bool,
     _current_instruction: (Instruction, u8),
 }
 
@@ -27,6 +28,7 @@ impl Cpu {
             pc: 0, //gb::init_pc_value,
             sp: 0,
             memory,
+            ime: false,
             finished_bootrom: false,
             _current_instruction: (Instruction::Nop, 0),
         }
@@ -38,7 +40,7 @@ impl Cpu {
             self.finished_bootrom = true;
         }
         let instruction = Instruction::from_bytes(&self.memory, self.pc);
-        //println!("{:#0x}: {}, {}", self.pc, instruction, self.registers);
+        println!("{:#0x}: {}, {}", self.pc, instruction, self.registers);
         self.execute(&instruction)
     }
 
@@ -709,13 +711,13 @@ impl Cpu {
                 },
                 ReturnKind::ReturnInterrupt => {
                     self.pop(&Load16Target::StackPointer);
-                    // TODO: Enable IME here
+                    self.ime = true;
                 }
             },
             Instruction::Pop(reg_pair) => self.pop(&Load16Target::Register16(*reg_pair)),
             Instruction::Push(reg_pair) => self.push(self.registers.get_16bit(reg_pair)),
-            Instruction::DisableInterrupts => { /* TODO */ }
-            Instruction::EnableInterrupts => { /* TODO */ }
+            Instruction::DisableInterrupts => self.ime = false,
+            Instruction::EnableInterrupts => self.ime = true,
             Instruction::Call(kind) => match kind {
                 CallKind::Call(a16) => {
                     self.push(self.pc);

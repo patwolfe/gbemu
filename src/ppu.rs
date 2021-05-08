@@ -89,11 +89,12 @@ impl Ppu {
 
             let ly = memory.read_byte(gb::ly_addr);
             let lcd_stat = memory.read_byte(gb::lcd_stat);
+            //println!("At start of cycle {} stat is {:#0x}", curr_cycle, lcd_stat);
             let mode = lcd_stat & 0x3;
             match mode {
                 // OAM search
                 0x2 => {
-                    println!("In oam search mode @ cycle {}", curr_cycle);
+                    //println!("In oam search mode @ cycle {}", curr_cycle);
                     if self.sprite_buffer.len() == 10 {
                         continue;
                     }
@@ -168,13 +169,13 @@ impl Ppu {
                             if ly as usize * gb::screen_width + self.x as usize >= buffer.len() {
                                 panic!("ly: {} * 144 + x: {}", ly, self.x);
                             }
-                            println!(
-                                "Pushing {} at ({}, {}) during cycle {}",
-                                Ppu::get_color(curr_pixel.color_index),
-                                self.x,
-                                ly,
-                                curr_cycle
-                            );
+                            //println!(
+                            //     "Pushing {} at ({}, {}) during cycle {}",
+                            //     Ppu::get_color(curr_pixel.color_index),
+                            //     self.x,
+                            //     ly,
+                            //     curr_cycle
+                            // );
                             buffer[ly as usize * gb::screen_width + self.x as usize] =
                                 Ppu::get_color(curr_pixel.color_index) as u32;
                             self.x += 1;
@@ -182,19 +183,19 @@ impl Ppu {
                     }
                 }
                 0x0 => {
-                    println!("In hblank mode @ cycle {}", curr_cycle);
+                    //println!("In hblank mode @ cycle {}", curr_cycle);
                 }
                 0x1 => {
-                    println!("In vblank mode @ cycle {}", curr_cycle);
+                    //println!("In vblank mode @ cycle {}", curr_cycle);
                 }
                 _ => panic!("Unexpected PPU mode: {}", mode),
             };
             if curr_cycle == 114 {
-                println!("setting ly to {}", ly + 1);
+                //println!("setting ly to {}", ly + 1);
                 memory.write_byte(gb::ly_addr, ly + 1);
             }
-            if self.cycles_this_frame == 17556 {
-                println!("Resetting frame cycle counter");
+            if self.cycles_this_frame == 17555 {
+                //println!("Resetting frame cycle counter");
                 self.cycles_this_frame = 0;
                 //memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x2);
             } else {
@@ -211,8 +212,8 @@ impl Ppu {
         match mode {
             // OAM search
             0x2 => {
-                println!("Switching mode from pixel transfer to hblank");
                 if curr_cycle == 20 {
+                    //println!("Switching mode from pixel transfer to pixel transfer");
                     // sort sprite buffer by x
                     memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x3)
                 }
@@ -221,7 +222,7 @@ impl Ppu {
                 if self.x == 160 {
                     self.x = 0;
                     self.fetcher_x_position = 0;
-                    println!("Switching mode from pixel transfer to hblank");
+                    //println!("Switching mode from pixel transfer to hblank");
                     memory.write_byte(gb::lcd_stat, lcd_stat & 0xFC)
                 }
             }
@@ -229,17 +230,17 @@ impl Ppu {
                 if curr_cycle == 114 {
                     self.bg_fifo.clear();
                     if ly == 144 {
-                        println!("Switching mode from hblank to vblank");
+                        //println!("Switching mode from hblank to vblank");
                         memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x1)
                     } else {
-                        println!("Switching mode from hblank to oam");
+                        //println!("Switching mode from hblank to oam");
                         memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x2)
                     }
                 }
             }
             0x1 => {
                 if ly == 153 {
-                    println!("Switching mode from vblank to oam");
+                    //println!("Switching mode from vblank to oam");
                     memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x2);
                     memory.write_byte(gb::ly_addr, 0);
                 }
