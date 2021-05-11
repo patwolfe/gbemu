@@ -4,6 +4,8 @@ use std::io::prelude::*;
 use std::io::Read;
 use std::io::SeekFrom;
 
+use crate::gb;
+
 pub struct Memory {
     pub rom_bank0: Vec<u8>,
     pub rom_bank1: Vec<u8>,
@@ -49,12 +51,14 @@ impl Memory {
         rom.read_exact(&mut rom_low_bytes).unwrap();
         rom.read_exact(&mut rom_bank0.as_mut_slice()[0x100..=(ROM0_END as usize)])
             .unwrap();
-        let rom_bank1 = vec![0; (ROM1_END - ROM1_START + 1) as usize];
+        let mut rom_bank1 = vec![0; (ROM1_END - ROM1_START + 1) as usize];
+        rom.read_exact(&mut rom_bank1).unwrap();
         let vram = vec![0; (VRAM_END - VRAM_START + 1) as usize];
         let eram = vec![0; (ERAM_END - ERAM_START + 1) as usize];
         let wram = vec![0; (WRAM_END - WRAM_START + 1) as usize];
         let oam = vec![0; (OAM_END - OAM_START + 1) as usize];
-        let io = vec![0; (IO_END - IO_START + 1) as usize];
+        let mut io = vec![0; (IO_END - IO_START + 1) as usize];
+        io[0] = 0xCF;
         let hram = vec![0; (HRAM_END - HRAM_START + 1) as usize];
         let interrupt_register = 0;
 
@@ -73,6 +77,9 @@ impl Memory {
     }
 
     pub fn read_byte(&self, address: u16) -> u8 {
+        // if address == 0xFF80 {
+        //     println!("Reading from ff80h which has val {:#0x}", self.hram[0]);
+        // };
         match address {
             ROM0_START..=ROM0_END => self.rom_bank0[address as usize],
             ROM1_START..=ROM1_END => self.rom_bank1[(address as usize) - 0x4000],
@@ -97,7 +104,13 @@ impl Memory {
 
     pub fn write_byte(&mut self, address: u16, value: u8) {
         if address == 0xFF41 {
-            println!("Writing {:#0x} to LCD status reg", value)
+            return;
+        };
+        if address == 0xFF80 && value != 0x0 {
+            panic!(
+                "writing to ff80h value {:#0x} previous value is {:#0x}",
+                value, self.io[0]
+            );
         };
         match address {
             ROM0_START..=ROM0_END => self.rom_bank0[address as usize] = value,
@@ -108,7 +121,11 @@ impl Memory {
             0xE000..=0xFDFF => {}
             OAM_START..=OAM_END => self.oam[(address as usize) - 0xFE00] = value,
             0xFEA0..=0xFEFF => {}
-            IO_START..=IO_END => self.io[(address as usize) - 0xFF00] = value,
+            IO_START..=IO_END => match address {
+                gb::joypad => self.io[gb::joypad as usize - 0xFF00] |= value & 0x30,
+                gb::lcd_stat => self.io[gb::lcd_stat as usize - 0xFF00] |= value & 0xF8,
+                _ => self.io[(address as usize) - 0xFF00] = value,
+            },
             HRAM_START..=HRAM_END => self.hram[(address as usize) - 0xFF80] = value,
             IR => self.interrupt_register = value,
         };
@@ -121,5 +138,9 @@ impl Memory {
     pub fn replace_bootrom(&mut self) {
         self.rom_bank0
             .splice(0..0x100, self.rom_low_bytes.as_slice().iter().cloned());
+    }
+
+    pub fn update_lcd_stat(&mut self, value: u8) {
+        self.io[gb::lcd_stat as usize - 0xFF00] = value
     }
 }

@@ -423,10 +423,10 @@ impl Instruction {
                 }
             }
             (0xC..=0xF, 0x7) => match high_bits {
-                0xC => Instruction::Restart(0),
-                0xD => Instruction::Restart(2),
-                0xE => Instruction::Restart(4),
-                0xF => Instruction::Restart(6),
+                0xC => Instruction::Restart(0x0),
+                0xD => Instruction::Restart(0x10),
+                0xE => Instruction::Restart(0x20),
+                0xF => Instruction::Restart(0x30),
                 _ => panic!("Invalid opcode: {:#x}", byte),
             },
             (0xC..=0xD, 0x8) => {
@@ -506,10 +506,10 @@ impl Instruction {
                 }
             }
             (0xC..=0xF, 0xF) => match high_bits {
-                0xC => Instruction::Restart(1),
-                0xD => Instruction::Restart(3),
-                0xE => Instruction::Restart(5),
-                0xF => Instruction::Restart(7),
+                0xC => Instruction::Restart(0x08),
+                0xD => Instruction::Restart(0x18),
+                0xE => Instruction::Restart(0x28),
+                0xF => Instruction::Restart(0x38),
                 _ => panic!("Invalid opcode: {:#x}", byte),
             },
             _ => panic!("Couldn't match opcode for {:#x}/{:#x}", high_bits, low_bits),

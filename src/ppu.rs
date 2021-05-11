@@ -115,14 +115,7 @@ impl Ppu {
                 0x3 => {
                     if self.bg_fifo.len() <= 8 {
                         // fetch tile
-                        let base_tilemap_location: u16 =
-                            if Ppu::check_lcdc(memory, LcdcFlag::WindowTileMapArea)
-                                || Ppu::check_lcdc(memory, LcdcFlag::TileMapArea)
-                            {
-                                0x9C00
-                            } else {
-                                0x9800
-                            };
+                        let base_tilemap_location: u16 = 0x9800;
                         let base_tile_data_location =
                             if Ppu::check_lcdc(memory, LcdcFlag::TileDataArea) {
                                 0x8000
@@ -215,7 +208,7 @@ impl Ppu {
                 if curr_cycle == 20 {
                     //println!("Switching mode from pixel transfer to pixel transfer");
                     // sort sprite buffer by x
-                    memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x3)
+                    memory.update_lcd_stat((lcd_stat & 0xFC) | 0x3)
                 }
             }
             0x3 => {
@@ -223,7 +216,7 @@ impl Ppu {
                     self.x = 0;
                     self.fetcher_x_position = 0;
                     //println!("Switching mode from pixel transfer to hblank");
-                    memory.write_byte(gb::lcd_stat, lcd_stat & 0xFC)
+                    memory.update_lcd_stat(lcd_stat & 0xFC)
                 }
             }
             0x0 => {
@@ -231,17 +224,17 @@ impl Ppu {
                     self.bg_fifo.clear();
                     if ly == 144 {
                         //println!("Switching mode from hblank to vblank");
-                        memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x1)
+                        memory.update_lcd_stat((lcd_stat & 0xFC) | 0x1)
                     } else {
                         //println!("Switching mode from hblank to oam");
-                        memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x2)
+                        memory.update_lcd_stat((lcd_stat & 0xFC) | 0x2)
                     }
                 }
             }
             0x1 => {
                 if ly == 153 {
                     //println!("Switching mode from vblank to oam");
-                    memory.write_byte(gb::lcd_stat, (lcd_stat & 0xFC) | 0x2);
+                    memory.update_lcd_stat((lcd_stat & 0xFC) | 0x2);
                     memory.write_byte(gb::ly_addr, 0);
                 }
             }

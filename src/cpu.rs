@@ -1,9 +1,10 @@
 use std::process;
 
 mod instruction;
+mod interrupt_handler;
 mod registers;
-
 use crate::cpu::instruction::*;
+use crate::cpu::interrupt_handler::*;
 use crate::cpu::registers::*;
 use crate::gb;
 use crate::memory::Memory;
@@ -15,7 +16,7 @@ pub struct Cpu {
     sp: u16,
     finished_bootrom: bool,
     pub memory: Memory,
-    pub ime: bool,
+    interrupt_handler: InterruptHandler,
     _current_instruction: (Instruction, u8),
 }
 
@@ -28,19 +29,28 @@ impl Cpu {
             pc: 0, //gb::init_pc_value,
             sp: 0,
             memory,
-            ime: false,
+            interrupt_handler: InterruptHandler { ime: false },
             finished_bootrom: false,
             _current_instruction: (Instruction::Nop, 0),
         }
     }
 
     pub fn step(&mut self) -> u8 {
-        if self.pc == 0x100 && !self.finished_bootrom {
+        if self.pc >= 0x100 && !self.finished_bootrom {
             self.memory.replace_bootrom();
             self.finished_bootrom = true;
         }
+        if self.interrupt_handler.interrupts_enabled() {
+            match self.interrupt_handler.check_interrupts(&mut self.memory) {
+                Some(interrupt) => self.call(interrupt_handler::address_for_interrupt(interrupt)),
+                None => {}
+            }
+        }
         let instruction = Instruction::from_bytes(&self.memory, self.pc);
-        println!("{:#0x}: {}, {}", self.pc, instruction, self.registers);
+        // println!(
+        //     "{:#0x}: {}, {}, sp: {:#0x}",
+        //     self.pc, instruction, self.registers, self.sp
+        // );
         self.execute(&instruction)
     }
 
@@ -711,23 +721,21 @@ impl Cpu {
                 },
                 ReturnKind::ReturnInterrupt => {
                     self.pop(&Load16Target::StackPointer);
-                    self.ime = true;
+                    self.interrupt_handler.enable_interrupts();
                 }
             },
             Instruction::Pop(reg_pair) => self.pop(&Load16Target::Register16(*reg_pair)),
             Instruction::Push(reg_pair) => self.push(self.registers.get_16bit(reg_pair)),
-            Instruction::DisableInterrupts => self.ime = false,
-            Instruction::EnableInterrupts => self.ime = true,
+            Instruction::DisableInterrupts => self.interrupt_handler.disable_interrupts(),
+            Instruction::EnableInterrupts => self.interrupt_handler.enable_interrupts(),
             Instruction::Call(kind) => match kind {
                 CallKind::Call(a16) => {
-                    self.push(self.pc);
-                    self.pc = *a16;
+                    self.call(*a16);
                 }
                 CallKind::CallConditional(a16, cond) => match cond {
                     JumpCondition::Zero => {
                         if self.registers.get_flag(Flag::Zero) {
-                            self.push(self.pc);
-                            self.pc = *a16;
+                            self.call(*a16);
                             cycles = Cpu::update_cycles(cycles, true)
                         } else {
                             cycles = Cpu::update_cycles(cycles, false)
@@ -735,8 +743,7 @@ impl Cpu {
                     }
                     JumpCondition::NonZero => {
                         if !self.registers.get_flag(Flag::Zero) {
-                            self.push(self.pc);
-                            self.pc = *a16;
+                            self.call(*a16);
                             cycles = Cpu::update_cycles(cycles, true)
                         } else {
                             cycles = Cpu::update_cycles(cycles, false)
@@ -744,8 +751,7 @@ impl Cpu {
                     }
                     JumpCondition::Carry => {
                         if self.registers.get_flag(Flag::Carry) {
-                            self.push(self.pc);
-                            self.pc = *a16;
+                            self.call(*a16);
                             cycles = Cpu::update_cycles(cycles, true)
                         } else {
                             cycles = Cpu::update_cycles(cycles, false)
@@ -753,8 +759,7 @@ impl Cpu {
                     }
                     JumpCondition::NonCarry => {
                         if !self.registers.get_flag(Flag::Carry) {
-                            self.push(self.pc);
-                            self.pc = *a16;
+                            self.call(*a16);
                             cycles = Cpu::update_cycles(cycles, true)
                         } else {
                             cycles = Cpu::update_cycles(cycles, false)
@@ -763,8 +768,7 @@ impl Cpu {
                 },
             },
             Instruction::Restart(offset) => {
-                self.push(self.sp);
-                self.pc = *offset as u16;
+                self.call(*offset as u16);
             }
             Instruction::AddPtr(PtrArithOperand::Register16(RegisterPair::Hl), operand) => {
                 let mut result = self.registers.get_16bit(&RegisterPair::Hl);
@@ -786,6 +790,11 @@ impl Cpu {
             Cycles::Cycles(n) => n,
             Cycles::ConditionalCycles(n, _) => n,
         }
+    }
+
+    fn call(&mut self, address: u16) {
+        self.push(self.pc);
+        self.pc = address;
     }
 
     fn pop(&mut self, target: &Load16Target) {
