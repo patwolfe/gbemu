@@ -25,10 +25,10 @@ impl InterruptHandler {
         self.ime = false;
     }
 
-    pub fn set_interrupt(&mut self, memory: &mut Memory, interrupt: Interrupt) {
+    pub fn set_interrupt(&self, memory: &mut Memory, interrupt: Interrupt) {
         memory.write_byte(
-            gb::ie,
-            memory.read_byte(gb::ie)
+            gb::iflags,
+            memory.read_byte(gb::iflags)
                 | match interrupt {
                     Interrupt::VBlank => 0x1,
                     Interrupt::LcdStat => 0x2,
@@ -39,10 +39,10 @@ impl InterruptHandler {
         );
     }
 
-    pub fn clear_interrupt(&mut self, memory: &mut Memory, interrupt: Interrupt) {
+    pub fn clear_interrupt(&self, memory: &mut Memory, interrupt: Interrupt) {
         memory.write_byte(
-            gb::ie,
-            memory.read_byte(gb::ie)
+            gb::iflags,
+            memory.read_byte(gb::iflags)
                 & match interrupt {
                     Interrupt::VBlank => !0x1,
                     Interrupt::LcdStat => !0x2,
@@ -53,21 +53,27 @@ impl InterruptHandler {
         );
     }
 
-    pub fn check_interrupts(&mut self, memory: &mut Memory) -> Option<Interrupt> {
+    pub fn check_interrupts(&self, memory: &mut Memory) -> Option<Interrupt> {
         let ie = memory.read_byte(gb::ie);
-        if ie & 0x1 != 0 {
+        let iflags = memory.read_byte(gb::iflags);
+        if ie & 0x1 != 0 && iflags & 0x1 != 0 {
+            println!("VBlank int");
             self.clear_interrupt(memory, Interrupt::VBlank);
             Some(Interrupt::VBlank)
-        } else if ie & 0x2 != 0 {
+        } else if ie & 0x2 != 0 && iflags & 0x2 != 0 {
+            println!("LcdStat int");
             self.clear_interrupt(memory, Interrupt::LcdStat);
             Some(Interrupt::LcdStat)
-        } else if ie & 0x4 != 0 {
+        } else if ie & 0x4 != 0 && iflags & 0x4 != 0 {
+            println!("Timer int");
             self.clear_interrupt(memory, Interrupt::Timer);
             Some(Interrupt::Timer)
-        } else if ie & 0x8 != 0 {
+        } else if ie & 0x8 != 0 && iflags & 0x8 != 0 {
+            println!("Serial int");
             self.clear_interrupt(memory, Interrupt::Serial);
             Some(Interrupt::Serial)
-        } else if ie & 0x10 != 0 {
+        } else if ie & 0x10 != 0 && iflags & 0x10 != 0 {
+            println!("Joyapd int");
             self.clear_interrupt(memory, Interrupt::Joypad);
             Some(Interrupt::Joypad)
         } else {

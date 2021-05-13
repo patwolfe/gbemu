@@ -1,7 +1,7 @@
 use std::process;
 
 mod instruction;
-mod interrupt_handler;
+pub mod interrupt_handler;
 mod registers;
 use crate::cpu::instruction::*;
 use crate::cpu::interrupt_handler::*;
@@ -16,7 +16,7 @@ pub struct Cpu {
     sp: u16,
     finished_bootrom: bool,
     pub memory: Memory,
-    interrupt_handler: InterruptHandler,
+    pub interrupt_handler: InterruptHandler,
     _current_instruction: (Instruction, u8),
 }
 
@@ -41,9 +41,9 @@ impl Cpu {
             self.finished_bootrom = true;
         }
         if self.interrupt_handler.interrupts_enabled() {
-            match self.interrupt_handler.check_interrupts(&mut self.memory) {
-                Some(interrupt) => self.call(interrupt_handler::address_for_interrupt(interrupt)),
-                None => {}
+            if let Some(interrupt) = self.interrupt_handler.check_interrupts(&mut self.memory) {
+                self.interrupt_handler.disable_interrupts();
+                self.call(interrupt_handler::address_for_interrupt(interrupt));
             }
         }
         let instruction = Instruction::from_bytes(&self.memory, self.pc);
@@ -173,21 +173,6 @@ impl Cpu {
                     };
                     let data = self.memory.read_byte(address);
                     self.registers.set(&Register::A, data);
-                }
-                (Load8Operand::AtHld, Load8Operand::Register(reg))
-                | (Load8Operand::AtHli, Load8Operand::Register(reg)) => {
-                    let data = self.registers.get(reg);
-                    let address: u16 = self.registers.get_16bit(&RegisterPair::Hl);
-                    match operand1 {
-                        Load8Operand::AtHld => {
-                            self.registers.set_16bit(&RegisterPair::Hl, address - 1)
-                        }
-                        Load8Operand::AtHli => {
-                            self.registers.set_16bit(&RegisterPair::Hl, address + 1)
-                        }
-                        _ => panic!("This can't happen"),
-                    }
-                    self.memory.write_byte(address, data);
                 }
                 _ => panic!("Enounctered unimplemented load8 instruction: {}", i),
             },
@@ -721,13 +706,17 @@ impl Cpu {
                 },
                 ReturnKind::ReturnInterrupt => {
                     self.pop(&Load16Target::StackPointer);
+                    println!("enabling interrupts through reti");
                     self.interrupt_handler.enable_interrupts();
                 }
             },
             Instruction::Pop(reg_pair) => self.pop(&Load16Target::Register16(*reg_pair)),
             Instruction::Push(reg_pair) => self.push(self.registers.get_16bit(reg_pair)),
             Instruction::DisableInterrupts => self.interrupt_handler.disable_interrupts(),
-            Instruction::EnableInterrupts => self.interrupt_handler.enable_interrupts(),
+            Instruction::EnableInterrupts => {
+                println!("Enabling ints through ei");
+                self.interrupt_handler.enable_interrupts()
+            }
             Instruction::Call(kind) => match kind {
                 CallKind::Call(a16) => {
                     self.call(*a16);

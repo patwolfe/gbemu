@@ -106,12 +106,6 @@ impl Memory {
         if address == 0xFF41 {
             return;
         };
-        if address == 0xFF80 && value != 0x0 {
-            panic!(
-                "writing to ff80h value {:#0x} previous value is {:#0x}",
-                value, self.io[0]
-            );
-        };
         match address {
             ROM0_START..=ROM0_END => self.rom_bank0[address as usize] = value,
             ROM1_START..=ROM1_END => self.rom_bank1[(address as usize) - 0x4000] = value,

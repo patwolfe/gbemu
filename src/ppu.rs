@@ -1,6 +1,7 @@
 use std::collections::VecDeque;
 use std::fmt;
 
+use crate::cpu::interrupt_handler::*;
 use crate::gb;
 use crate::memory::Memory;
 
@@ -53,7 +54,7 @@ pub struct Ppu {
 }
 
 impl Ppu {
-    pub fn new() -> Ppu {
+    pub fn new(interrupt_handler: &InterruptHandler) -> Ppu {
         Ppu {
             bg_fifo: VecDeque::with_capacity(16),
             obj_fifo: VecDeque::with_capacity(16),
@@ -79,7 +80,13 @@ impl Ppu {
         }
     }
 
-    pub fn step(&mut self, cycles: u32, memory: &mut Memory, buffer: &mut Vec<u32>) {
+    pub fn step(
+        &mut self,
+        cycles: u32,
+        memory: &mut Memory,
+        interrupt_handler: &InterruptHandler,
+        buffer: &mut Vec<u32>,
+    ) {
         let mut cycles_taken = 0;
         while cycles_taken < cycles {
             if !Ppu::check_lcdc(memory, LcdcFlag::Enable) {
@@ -194,11 +201,16 @@ impl Ppu {
             } else {
                 self.cycles_this_frame += 1;
             }
-            self.update_mode(memory, curr_cycle);
+            self.update_mode(memory, interrupt_handler, curr_cycle);
             cycles_taken += 1;
         }
     }
-    fn update_mode(&mut self, memory: &mut Memory, curr_cycle: u64) {
+    fn update_mode(
+        &mut self,
+        memory: &mut Memory,
+        interrupt_handler: &InterruptHandler,
+        curr_cycle: u64,
+    ) {
         let lcd_stat = memory.read_byte(gb::lcd_stat);
         let mode = lcd_stat & 0x3;
         let ly = memory.read_byte(gb::ly_addr);
@@ -223,6 +235,7 @@ impl Ppu {
                 if curr_cycle == 114 {
                     self.bg_fifo.clear();
                     if ly == 144 {
+                        interrupt_handler.set_interrupt(memory, Interrupt::VBlank);
                         //println!("Switching mode from hblank to vblank");
                         memory.update_lcd_stat((lcd_stat & 0xFC) | 0x1)
                     } else {

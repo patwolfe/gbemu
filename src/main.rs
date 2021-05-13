@@ -8,6 +8,7 @@ mod memory;
 mod ppu;
 mod timer;
 
+use crate::cpu::interrupt_handler::Interrupt;
 use crate::cpu::Cpu;
 use crate::ppu::Ppu;
 
@@ -36,14 +37,25 @@ fn main() {
     let mut buffer: Vec<u32> = vec![0; gb::total_pixels];
 
     let mut cpu = Cpu::new();
-    let mut ppu = Ppu::new();
+    let mut ppu = Ppu::new(&cpu.interrupt_handler);
     let mut cycles_taken = 0;
     #[allow(clippy::never_loop)]
     while window.is_open() && !window.is_key_down(Key::Escape) {
+        if window.is_key_down(Key::Enter) {
+            cpu.interrupt_handler
+                .set_interrupt(&mut cpu.memory, Interrupt::Joypad);
+            cpu.memory.write_byte(gb::joypad, 0x28);
+            println!("Pressed start");
+        }
         let start_time = Instant::now();
         while cycles_taken < gb::cycles_per_frame {
             let cycles_instruction = cpu.step() as u32;
-            ppu.step(cycles_instruction, &mut cpu.memory, &mut buffer);
+            ppu.step(
+                cycles_instruction,
+                &mut cpu.memory,
+                &cpu.interrupt_handler,
+                &mut buffer,
+            );
             cycles_taken += cycles_instruction;
         }
         cycles_taken %= gb::cycles_per_frame;
